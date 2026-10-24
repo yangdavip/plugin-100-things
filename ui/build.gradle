@@ -1,0 +1,69 @@
+plugins {
+    id 'base'
+    id "com.github.node-gradle.node" version "7.1.0"
+}
+
+group 'com.matrixgrowth.plugin100things.ui'
+
+// 官方脚手架默认用 pnpm 构建 UI（CI 的 reusable-workflows 也用 pnpm），因此默认保持 pnpm。
+// 若本机环境禁止 pnpm 创建 symlink（部分受限沙箱会拦截），可在
+// ~/.gradle/gradle.properties 里加一行 `ui.useNpm=true` 切到 npm；
+// 或执行时加参数：./gradlew build -Pui.useNpm=true
+def useNpm = (project.findProperty("ui.useNpm") ?: "false").toString().toBoolean()
+
+tasks.register('uiBuild', Exec) {
+    group = 'build'
+    description = 'Build the UI project'
+    workingDir = project.projectDir
+    commandLine 'npm', 'run', 'build-only'
+    inputs.dir(layout.projectDirectory.dir('src'))
+    inputs.files(fileTree(
+        dir: layout.projectDirectory,
+        includes: ['*.cjs', '*.ts', '*.js', '*.json', '*.yaml']))
+    outputs.dir(layout.buildDirectory.dir('dist'))
+}
+
+tasks.register('uiCheck', Exec) {
+    group = 'verification'
+    description = 'Run unit tests for the UI project'
+    workingDir = project.projectDir
+    commandLine 'npm', 'run', 'test:unit'
+}
+
+if (!useNpm) {
+    // 官方 pnpm 流程（保留以便在正常环境回退）
+    tasks.register('pnpmBuild', PnpmTask) {
+        group = 'build'
+        description = 'Build the UI project using pnpm'
+        args = ['build']
+        dependsOn tasks.named('pnpmInstall')
+        inputs.dir(layout.projectDirectory.dir('src'))
+        inputs.files(fileTree(
+            dir: layout.projectDirectory,
+            includes: ['*.cjs', '*.ts', '*.js', '*.json', '*.yaml']))
+        outputs.dir(layout.buildDirectory.dir('dist'))
+    }
+
+    tasks.register('pnpmCheck', PnpmTask) {
+        group = 'verification'
+        description = 'Run unit tests for the UI project using pnpm'
+        args = ['test:unit']
+        dependsOn tasks.named('pnpmInstall')
+    }
+
+    tasks.named('check') {
+        dependsOn tasks.named('pnpmCheck')
+    }
+
+    tasks.named('assemble') {
+        dependsOn tasks.named('pnpmBuild')
+    }
+} else {
+    tasks.named('check') {
+        dependsOn tasks.named('uiCheck')
+    }
+
+    tasks.named('assemble') {
+        dependsOn tasks.named('uiBuild')
+    }
+}

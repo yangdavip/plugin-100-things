@@ -1,0 +1,674 @@
+[
+ {
+  "n": 1,
+  "title": "和十七岁的自己聊一次天",
+  "cat": "青春时光",
+  "status": "TREASURED",
+  "mood": "MOVED",
+  "doneAt": "2025-03-08T00:00:00Z",
+  "note": "翻开旧日记，字迹还是那个会为一场雨难过的自己。"
+ },
+ {
+  "n": 2,
+  "title": "在旧照片里找到十七岁的脸",
+  "cat": "青春时光",
+  "status": "TODO"
+ },
+ {
+  "n": 3,
+  "title": "重走一次当年上学的路",
+  "cat": "青春时光",
+  "status": "WAITING"
+ },
+ {
+  "n": 4,
+  "title": "写一封给二十岁的信",
+  "cat": "青春时光",
+  "status": "TREASURED",
+  "mood": "MISSING",
+  "doneAt": "2025-06-14T00:00:00Z",
+  "note": "写到一半才发现，很多事原来一直没放下。"
+ },
+ {
+  "n": 5,
+  "title": "翻出高中时期的日记",
+  "cat": "青春时光",
+  "status": "TODO"
+ },
+ {
+  "n": 6,
+  "title": "为青春期的某个遗憾好好打个招呼",
+  "cat": "青春时光",
+  "status": "TODO"
+ },
+ {
+  "n": 7,
+  "title": "穿一次校服出门",
+  "cat": "青春时光",
+  "status": "TREASURED",
+  "mood": "EXPECTED",
+  "doneAt": "2026-01-22T00:00:00Z",
+  "note": "校服穿在身上，比记忆里小了一圈，也温柔了一圈。"
+ },
+ {
+  "n": 8,
+  "title": "偷偷留下那张翘课的票根",
+  "cat": "青春时光",
+  "status": "TODO"
+ },
+ {
+  "n": 9,
+  "title": "把青春歌单听回第一首",
+  "cat": "青春时光",
+  "status": "TODO"
+ },
+ {
+  "n": 10,
+  "title": "在离家的城市里找到那家旧书店",
+  "cat": "青春时光",
+  "status": "TODO"
+ },
+ {
+  "n": 11,
+  "title": "早起给自己做一顿早餐",
+  "cat": "生活日常",
+  "status": "TODO"
+ },
+ {
+  "n": 12,
+  "title": "穿睡衣去楼下取快递",
+  "cat": "生活日常",
+  "status": "TREASURED",
+  "mood": "RELAXED",
+  "doneAt": "2025-04-19T00:00:00Z",
+  "note": "清晨的街道只有我一个人，安静得能听见风。"
+ },
+ {
+  "n": 13,
+  "title": "发现一家藏得很深的小店",
+  "cat": "生活日常",
+  "status": "TODO"
+ },
+ {
+  "n": 14,
+  "title": "尝遍楼下所有早餐铺",
+  "cat": "生活日常",
+  "status": "WAITING"
+ },
+ {
+  "n": 15,
+  "title": "在家里煮一次火锅",
+  "cat": "生活日常",
+  "status": "TODO"
+ },
+ {
+  "n": 16,
+  "title": "给自己过一个认真的生日",
+  "cat": "生活日常",
+  "status": "TREASURED",
+  "mood": "SURPRISED",
+  "doneAt": "2025-12-03T00:00:00Z",
+  "note": "生日那天没有任何人知道，我却认真许了愿。"
+ },
+ {
+  "n": 17,
+  "title": "熬一次夜只为了聊天",
+  "cat": "生活日常",
+  "status": "TODO"
+ },
+ {
+  "n": 18,
+  "title": "一个人看完一场老电影",
+  "cat": "生活日常",
+  "status": "TODO"
+ },
+ {
+  "n": 19,
+  "title": "拍一张自己房间的照片",
+  "cat": "生活日常",
+  "status": "TODO"
+ },
+ {
+  "n": 20,
+  "title": "认真收拾一次房间",
+  "cat": "生活日常",
+  "status": "TODO"
+ },
+ {
+  "n": 21,
+  "title": "认识一个完全不同领域的人",
+  "cat": "朋友之间",
+  "status": "TODO"
+ },
+ {
+  "n": 22,
+  "title": "和朋友交换一本书",
+  "cat": "朋友之间",
+  "status": "TREASURED",
+  "mood": "MOVED",
+  "doneAt": "2026-02-11T00:00:00Z",
+  "note": "有些话当面说不出口，写在书页里刚刚好。"
+ },
+ {
+  "n": 23,
+  "title": "给朋友写一封信",
+  "cat": "朋友之间",
+  "status": "TODO"
+ },
+ {
+  "n": 24,
+  "title": "和朋友一起完成一张大拼图",
+  "cat": "朋友之间",
+  "status": "TODO"
+ },
+ {
+  "n": 25,
+  "title": "和朋友去一次没去过的地方",
+  "cat": "朋友之间",
+  "status": "WAITING"
+ },
+ {
+  "n": 26,
+  "title": "为朋友准备一个小惊喜",
+  "cat": "朋友之间",
+  "status": "TREASURED",
+  "mood": "SURPRISED",
+  "doneAt": "2026-09-05T00:00:00Z",
+  "note": "他推门进来时手里拿着一束花，是朋友。"
+ },
+ {
+  "n": 27,
+  "title": "和老朋友见一面",
+  "cat": "朋友之间",
+  "status": "TODO"
+ },
+ {
+  "n": 28,
+  "title": "认真说一次谢谢",
+  "cat": "朋友之间",
+  "status": "TODO"
+ },
+ {
+  "n": 29,
+  "title": "勇敢说一次对不起",
+  "cat": "朋友之间",
+  "status": "TODO"
+ },
+ {
+  "n": 30,
+  "title": "录下一段朋友的声音",
+  "cat": "朋友之间",
+  "status": "TODO"
+ },
+ {
+  "n": 31,
+  "title": "一个人看场电影",
+  "cat": "一个人的浪漫",
+  "status": "TODO"
+ },
+ {
+  "n": 32,
+  "title": "一个人逛博物馆",
+  "cat": "一个人的浪漫",
+  "status": "TODO"
+ },
+ {
+  "n": 33,
+  "title": "一个人去看花",
+  "cat": "一个人的浪漫",
+  "status": "TREASURED",
+  "mood": "CALM",
+  "doneAt": "2026-05-16T00:00:00Z",
+  "note": "一个人站在花海边上，风比想象中温柔。"
+ },
+ {
+  "n": 34,
+  "title": "一个人吃顿好饭",
+  "cat": "一个人的浪漫",
+  "status": "TODO"
+ },
+ {
+  "n": 35,
+  "title": "一个人散步到天黑",
+  "cat": "一个人的浪漫",
+  "status": "TODO"
+ },
+ {
+  "n": 36,
+  "title": "找到自己的秘密基地",
+  "cat": "一个人的浪漫",
+  "status": "TREASURED",
+  "mood": "RELAXED",
+  "doneAt": "2025-11-08T00:00:00Z",
+  "note": "找到那个只属于我的角落，谁也不许打扰。"
+ },
+ {
+  "n": 37,
+  "title": "买一束花送给自己",
+  "cat": "一个人的浪漫",
+  "status": "TODO"
+ },
+ {
+  "n": 38,
+  "title": "写一封信给未来",
+  "cat": "一个人的浪漫",
+  "status": "WAITING"
+ },
+ {
+  "n": 39,
+  "title": "记录一个普通下午",
+  "cat": "一个人的浪漫",
+  "status": "TODO"
+ },
+ {
+  "n": 40,
+  "title": "和自己拍一张合照",
+  "cat": "一个人的浪漫",
+  "status": "TREASURED",
+  "mood": "MOVED",
+  "doneAt": "2026-08-21T00:00:00Z",
+  "note": "照片里那个人有点陌生，可她笑得很真。"
+ },
+ {
+  "n": 41,
+  "title": "坐一次绿皮火车",
+  "cat": "小小远方",
+  "status": "TODO"
+ },
+ {
+  "n": 42,
+  "title": "去一座陌生城市",
+  "cat": "小小远方",
+  "status": "TREASURED",
+  "mood": "EXPECTED",
+  "doneAt": "2026-06-30T00:00:00Z",
+  "note": "陌生的城市，陌生的路，可我一点也不慌。"
+ },
+ {
+  "n": 43,
+  "title": "看一次真正的大海",
+  "cat": "小小远方",
+  "status": "TODO"
+ },
+ {
+  "n": 44,
+  "title": "爬一座不高的山",
+  "cat": "小小远方",
+  "status": "WAITING"
+ },
+ {
+  "n": 45,
+  "title": "在山顶等日出",
+  "cat": "小小远方",
+  "status": "TREASURED",
+  "mood": "FREE",
+  "doneAt": "2026-09-27T00:00:00Z",
+  "note": "山顶的风很大，星星很多，人间安静。"
+ },
+ {
+  "n": 46,
+  "title": "看一次漫天星星",
+  "cat": "小小远方",
+  "status": "TODO"
+ },
+ {
+  "n": 47,
+  "title": "去郊外野餐",
+  "cat": "小小远方",
+  "status": "LATER"
+ },
+ {
+  "n": 48,
+  "title": "沿着河边散步",
+  "cat": "小小远方",
+  "status": "TODO"
+ },
+ {
+  "n": 49,
+  "title": "迷一次不危险的路",
+  "cat": "小小远方",
+  "status": "TODO"
+ },
+ {
+  "n": 50,
+  "title": "带回一张旅行车票",
+  "cat": "小小远方",
+  "status": "TODO"
+ },
+ {
+  "n": 51,
+  "title": "找到一项真正的爱好",
+  "cat": "关于热爱",
+  "status": "TODO"
+ },
+ {
+  "n": 52,
+  "title": "学会一首喜欢的歌",
+  "cat": "关于热爱",
+  "status": "TREASURED",
+  "mood": "MOVED",
+  "doneAt": "2025-05-24T00:00:00Z",
+  "note": "整首歌唱到最后一句时，房间里只有月光。"
+ },
+ {
+  "n": 53,
+  "title": "读完一本厚书",
+  "cat": "关于热爱",
+  "status": "TODO"
+ },
+ {
+  "n": 54,
+  "title": "写完一个小故事",
+  "cat": "关于热爱",
+  "status": "WAITING"
+ },
+ {
+  "n": 55,
+  "title": "拍一组喜欢的照片",
+  "cat": "关于热爱",
+  "status": "TODO"
+ },
+ {
+  "n": 56,
+  "title": "画一幅不完美的画",
+  "cat": "关于热爱",
+  "status": "TREASURED",
+  "mood": "CALM",
+  "doneAt": "2026-03-13T00:00:00Z",
+  "note": "画得并不好，可这是我第一张完整的画。"
+ },
+ {
+  "n": 57,
+  "title": "种活一盆植物",
+  "cat": "关于热爱",
+  "status": "TODO"
+ },
+ {
+  "n": 58,
+  "title": "学会一道拿手菜",
+  "cat": "关于热爱",
+  "status": "TODO"
+ },
+ {
+  "n": 59,
+  "title": "做一件亲手完成的礼物",
+  "cat": "关于热爱",
+  "status": "LATER"
+ },
+ {
+  "n": 60,
+  "title": "坚持一件小事一百天",
+  "cat": "关于热爱",
+  "status": "TODO"
+ },
+ {
+  "n": 61,
+  "title": "在很多人面前发言",
+  "cat": "勇敢一点",
+  "status": "TODO"
+ },
+ {
+  "n": 62,
+  "title": "主动认识一个人",
+  "cat": "勇敢一点",
+  "status": "TREASURED",
+  "mood": "SURPRISED",
+  "doneAt": "2026-10-10T00:00:00Z",
+  "note": "主动说了一句话，世界好像开了一扇窗。"
+ },
+ {
+  "n": 63,
+  "title": "对喜欢的人表达心意",
+  "cat": "勇敢一点",
+  "status": "TODO"
+ },
+ {
+  "n": 64,
+  "title": "拒绝一次勉强自己",
+  "cat": "勇敢一点",
+  "status": "TODO"
+ },
+ {
+  "n": 65,
+  "title": "尝试一次新发型",
+  "cat": "勇敢一点",
+  "status": "TODO"
+ },
+ {
+  "n": 66,
+  "title": "穿一次大胆的衣服",
+  "cat": "勇敢一点",
+  "status": "TREASURED",
+  "mood": "FREE",
+  "doneAt": "2025-08-02T00:00:00Z",
+  "note": "第一次穿那么亮的衣服出门，心里很轻。"
+ },
+ {
+  "n": 67,
+  "title": "去参加陌生活动",
+  "cat": "勇敢一点",
+  "status": "TODO"
+ },
+ {
+  "n": 68,
+  "title": "完成一件害怕的事",
+  "cat": "勇敢一点",
+  "status": "WAITING"
+ },
+ {
+  "n": 69,
+  "title": "坦然接受一次失败",
+  "cat": "勇敢一点",
+  "status": "TREASURED",
+  "mood": "CALM",
+  "doneAt": "2026-07-18T00:00:00Z",
+  "note": "失败就失败吧，春天还在。"
+ },
+ {
+  "n": 70,
+  "title": "为自己认真争取一次",
+  "cat": "勇敢一点",
+  "status": "TODO"
+ },
+ {
+  "n": 71,
+  "title": "看一场现场演出",
+  "cat": "感受世界",
+  "status": "TREASURED",
+  "mood": "RELAXED",
+  "doneAt": "2026-04-04T00:00:00Z",
+  "note": "灯光暗下来的时候，陌生人和我一起安静。"
+ },
+ {
+  "n": 72,
+  "title": "听一次街头歌唱",
+  "cat": "感受世界",
+  "status": "TODO"
+ },
+ {
+  "n": 73,
+  "title": "逛一次旧书店",
+  "cat": "感受世界",
+  "status": "TODO"
+ },
+ {
+  "n": 74,
+  "title": "看一次艺术展",
+  "cat": "感受世界",
+  "status": "WAITING"
+ },
+ {
+  "n": 75,
+  "title": "参加一次音乐节",
+  "cat": "感受世界",
+  "status": "TREASURED",
+  "mood": "MOVED",
+  "doneAt": "2026-10-18T00:00:00Z",
+  "note": "音乐节的风、灯光和陌生人，我全都记住了。"
+ },
+ {
+  "n": 76,
+  "title": "看一场话剧",
+  "cat": "感受世界",
+  "status": "TODO"
+ },
+ {
+  "n": 77,
+  "title": "去一次天文馆",
+  "cat": "感受世界",
+  "status": "TODO"
+ },
+ {
+  "n": 78,
+  "title": "观察一次月亮圆缺",
+  "cat": "感受世界",
+  "status": "TODO"
+ },
+ {
+  "n": 79,
+  "title": "在春天认真看花",
+  "cat": "感受世界",
+  "status": "TODO"
+ },
+ {
+  "n": 80,
+  "title": "在冬天等一场雪",
+  "cat": "感受世界",
+  "status": "TODO"
+ },
+ {
+  "n": 81,
+  "title": "拍一张自己的证件照",
+  "cat": "留下痕迹",
+  "status": "TODO"
+ },
+ {
+  "n": 82,
+  "title": "保存一张手写的日程表",
+  "cat": "留下痕迹",
+  "status": "TODO"
+ },
+ {
+  "n": 83,
+  "title": "留下第一次获奖的证明",
+  "cat": "留下痕迹",
+  "status": "TREASURED",
+  "mood": "EXPECTED",
+  "doneAt": "2025-07-20T00:00:00Z",
+  "note": "把第一张奖状收好，像收藏一个更用力的自己。"
+ },
+ {
+  "n": 84,
+  "title": "收藏一张手写便签",
+  "cat": "留下痕迹",
+  "status": "LATER"
+ },
+ {
+  "n": 85,
+  "title": "记录一次心动瞬间",
+  "cat": "留下痕迹",
+  "status": "TODO"
+ },
+ {
+  "n": 86,
+  "title": "做一本自己的相册",
+  "cat": "留下痕迹",
+  "status": "TREASURED",
+  "mood": "RELAXED",
+  "doneAt": "2025-10-31T00:00:00Z",
+  "note": "相册里全是普通日子，翻起来却停不下来。"
+ },
+ {
+  "n": 87,
+  "title": "录下一座城的声音",
+  "cat": "留下痕迹",
+  "status": "TODO"
+ },
+ {
+  "n": 88,
+  "title": "写一篇年度回忆",
+  "cat": "留下痕迹",
+  "status": "TODO"
+ },
+ {
+  "n": 89,
+  "title": "保存一段舍不得删的聊天",
+  "cat": "留下痕迹",
+  "status": "TODO"
+ },
+ {
+  "n": 90,
+  "title": "给这段时间做一段视频",
+  "cat": "留下痕迹",
+  "status": "WAITING"
+ },
+ {
+  "n": 91,
+  "title": "和喜欢的老师聊聊天",
+  "cat": "好好告别",
+  "status": "TODO"
+ },
+ {
+  "n": 92,
+  "title": "回一次刚出发的地方",
+  "cat": "好好告别",
+  "status": "TREASURED",
+  "mood": "MISSING",
+  "doneAt": "2026-08-08T00:00:00Z",
+  "note": "回到出发的地方，路还是那条路，人已经不同。"
+ },
+ {
+  "n": 93,
+  "title": "再吃一次最爱的窗口",
+  "cat": "好好告别",
+  "status": "TODO"
+ },
+ {
+  "n": 94,
+  "title": "和好友散一次步",
+  "cat": "好好告别",
+  "status": "TODO"
+ },
+ {
+  "n": 95,
+  "title": "向重要的人表达感谢",
+  "cat": "好好告别",
+  "status": "WAITING"
+ },
+ {
+  "n": 96,
+  "title": "穿一次最喜欢的衣服出门",
+  "cat": "好好告别",
+  "status": "TREASURED",
+  "mood": "SURPRISED",
+  "doneAt": "2026-02-26T00:00:00Z",
+  "note": "那件最喜欢的衣服，第一次穿得这么理直气壮。"
+ },
+ {
+  "n": 97,
+  "title": "拍一张所有人的合照",
+  "cat": "好好告别",
+  "status": "TODO"
+ },
+ {
+  "n": 98,
+  "title": "写下这些年最大的遗憾",
+  "cat": "好好告别",
+  "status": "TODO"
+ },
+ {
+  "n": 99,
+  "title": "原谅曾经的自己",
+  "cat": "好好告别",
+  "status": "TREASURED",
+  "mood": "MOVED",
+  "doneAt": "2026-09-01T00:00:00Z",
+  "note": "原谅从前的我，就像原谅一个还在长大的朋友。"
+ },
+ {
+  "n": 100,
+  "title": "对这段人生认真说再见",
+  "cat": "好好告别",
+  "status": "LATER"
+ }
+]

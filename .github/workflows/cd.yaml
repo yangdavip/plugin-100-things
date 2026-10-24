@@ -1,0 +1,28 @@
+name: CD
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  cd:
+    uses: halo-sigs/reusable-workflows/.github/workflows/plugin-cd.yaml@v5
+    secrets:
+      # https://github.com/halo-sigs/reusable-workflows#githubworkflowsplugin-cdyaml
+      # 在 Halo 官网「个人中心 → 个人令牌」创建，勾选「应用市场开发者 > 版本管理」，
+      # 再在 GitHub 仓库 Settings → Secrets and variables → Actions 新建同名 Secret。
+      halo-pat: ${{ secrets.HALO_PAT }}
+    permissions:
+      contents: write
+    with:
+      ui-path: "ui"
+      pnpm-version: 10
+      node-version: 24
+      java-version: 21
+      # 首次审核前只上传 GitHub Release 资产，不自动同步到应用市场。
+      # 首次审核通过后，删除下面这行并填上应用市场应用 ID（见应用管理页面）。
+      skip-appstore-release: true
+      # app-id: app-xxxxxxxx
+      # 首次审核通过后若希望同步公开仓库的 README，打开下面这行。
+      # sync-github-readme: true

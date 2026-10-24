@@ -1,0 +1,26 @@
+# Refer https://docs.halo.run/developer-guide/plugin/basics/manifest
+
+apiVersion: plugin.halo.run/v1alpha1
+kind: Plugin
+metadata:
+  # The name defines how the plugin is invoked, A unique name
+  name: plugin-100-things
+  # 在 Halo 应用市场开发者后台创建应用后，把应用 ID 填到这里，
+  # 才能让 CD 流水线把版本自动同步到应用市场（首次审核通过后再开启）。
+  # annotations:
+  #   store.halo.run/app-id: app-xxxxxxxx
+spec:
+  enabled: true
+  requires: ">=2.27.0"
+  author:
+    name: 矩阵生长
+    website: https://github.com/yangdavip
+  logo: logo.png
+  homepage: https://github.com/yangdavip/plugin-100-things#readme
+  repo: https://github.com/yangdavip/plugin-100-things
+  issues: https://github.com/yangdavip/plugin-100-things/issues
+  displayName: "100 件小事"
+  description: "人生小事清单：内置 100 件想做成的小事，支持打卡、记录心情与一句话备忘，并在博客前台展示清单与进度。"
+  license:
+    - name: "GPL-3.0"
+      url: "https://github.com/yangdavip/plugin-100-things/blob/main/LICENSE"

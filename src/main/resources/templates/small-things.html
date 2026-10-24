@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html
+  xmlns:th="https://www.thymeleaf.org"
+  th:replace="~{layout :: html(head = ~{::head}, content = ~{::content})}"
+>
+  <th:block th:fragment="head">
+    <title>100 件小事 - [[${site.title}]]</title>
+    <meta name="description" content="短暂人生，你想做的 100 件事情" />
+  </th:block>
+
+  <th:block th:fragment="content">
+    <style>
+      .th100 {
+        --paper: #faf4e8;
+        --card: #fffdf7;
+        --ink: #3d362c;
+        --ink-soft: #7b6e5c;
+        --ink-faint: #a5967e;
+        --line: #e4d9c4;
+        --line-soft: #efe7d6;
+        --accent: #b3895f;
+        --accent-deep: #8e6a44;
+        --accent-wash: #f4e7d2;
+        --radius: 14px;
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 40px 20px 70px;
+        color: var(--ink);
+        font-size: 14px;
+        line-height: 1.7;
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      }
+      .th100 .serif {
+        font-family: Georgia, "Times New Roman", "Songti SC", "STSong", "SimSun", serif;
+      }
+      .th100-head {
+        text-align: center;
+        padding-bottom: 18px;
+      }
+      .th100-head h1 {
+        font-size: clamp(21px, 4.2vw, 32px);
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        line-height: 1.4;
+      }
+      .th100-head .sub {
+        margin-top: 8px;
+        color: var(--ink-faint);
+        font-size: 12.5px;
+        letter-spacing: 3px;
+      }
+      .th100-head .quote {
+        margin-top: 16px;
+        color: var(--ink-soft);
+        font-size: 13px;
+        letter-spacing: 1.2px;
+      }
+      .th100-head .quote::before,
+      .th100-head .quote::after {
+        content: "";
+        display: inline-block;
+        width: 24px;
+        height: 1px;
+        background: var(--line);
+        vertical-align: middle;
+        margin: 0 12px;
+      }
+      .th100-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        margin-bottom: 26px;
+      }
+      .th100-bar .txt {
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        white-space: nowrap;
+      }
+      .th100-bar .txt b {
+        color: var(--accent-deep);
+        font-size: 17px;
+        font-family: Georgia, serif;
+      }
+      .th100-bar .track {
+        flex: 1 1 180px;
+        min-width: 120px;
+        height: 7px;
+        border-radius: 99px;
+        background: var(--line-soft);
+        border: 1px solid var(--line);
+        overflow: hidden;
+      }
+      .th100-bar .fill {
+        height: 100%;
+        background: linear-gradient(90deg, #d3b183, var(--accent));
+      }
+      .th100-bar .lv {
+        font-size: 11.5px;
+        color: var(--accent-deep);
+        background: var(--accent-wash);
+        border: 1px solid #e6d3b3;
+        border-radius: 999px;
+        padding: 2px 10px;
+        white-space: nowrap;
+      }
+      .th100-group {
+        margin-bottom: 30px;
+      }
+      .th100-group-head {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        margin-bottom: 13px;
+      }
+      .th100-group-head h2 {
+        font-size: 16.5px;
+        font-weight: 600;
+        letter-spacing: 1.6px;
+        white-space: nowrap;
+      }
+      .th100-group-head .rule {
+        flex: 1;
+        height: 1px;
+        background: var(--line);
+      }
+      .th100-group-head .num {
+        font-size: 11.5px;
+        color: var(--ink-faint);
+        letter-spacing: 1px;
+        white-space: nowrap;
+      }
+      .th100-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+        gap: 13px;
+      }
+      .th100-card {
+        position: relative;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 15px;
+        min-height: 118px;
+        display: flex;
+        flex-direction: column;
+      }
+      .th100-card .no {
+        font-size: 11px;
+        color: var(--ink-faint);
+        letter-spacing: 1.4px;
+        font-family: Georgia, serif;
+      }
+      .th100-card .name {
+        font-size: 14.5px;
+        line-height: 1.55;
+        margin: 6px 0 10px;
+        font-weight: 500;
+      }
+      .th100-card .foot {
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .th100-pill {
+        font-size: 11.5px;
+        border-radius: 999px;
+        padding: 2px 10px;
+        border: 1px solid;
+        white-space: nowrap;
+      }
+      .th100-pill.todo {
+        background: #f3ede1;
+        color: #8d7f68;
+        border-color: #e2d7c1;
+      }
+      .th100-pill.waiting {
+        background: #e6eff1;
+        color: #5d8892;
+        border-color: #cfe1e4;
+      }
+      .th100-pill.treasured {
+        background: #f7ead0;
+        color: #a37b3c;
+        border-color: #ecd8ac;
+      }
+      .th100-pill.later {
+        background: #ece7f2;
+        color: #7b6d9a;
+        border-color: #dbd2e8;
+      }
+      .th100-card .date {
+        font-size: 11.5px;
+        color: var(--ink-faint);
+        letter-spacing: 0.5px;
+      }
+      .th100-card .note {
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        line-height: 1.7;
+        margin-bottom: 8px;
+      }
+      .th100-empty {
+        padding: 46px 0;
+        text-align: center;
+        color: var(--ink-faint);
+        font-size: 13.5px;
+      }
+      @media (max-width: 640px) {
+        .th100-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+
+    <div class="th100">
+      <div class="th100-head">
+        <h1 class="serif">短暂人生，你想做的 100 件事情</h1>
+        <div class="sub">一百件小事 · 一生的清单</div>
+        <div class="quote">有些事情不是为了完成，而是为了记住。</div>
+      </div>
+
+      <div class="th100-bar">
+        <span class="txt">已珍藏 <b th:text="${treasuredCount}">0</b> / 100 件</span>
+        <span class="track">
+          <span class="fill" th:style="'width:' + ${treasuredCount} + '%'"></span>
+        </span>
+        <span class="lv">100 件小事清单</span>
+      </div>
+
+      <div th:if="${#lists.isEmpty(smallThings)}" class="th100-empty">
+        这张清单还没有被填写。
+      </div>
+
+      <div
+        th:each="cat : ${ {'青春时光','生活日常','朋友之间','一个人的浪漫','小小远方','关于热爱','勇敢一点','感受世界','留下痕迹','好好告别'} }"
+        class="th100-group"
+        th:with="items = ${smallThings.?[spec.category == cat]}"
+        th:if="${!#lists.isEmpty(items)}"
+      >
+        <div class="th100-group-head">
+          <h2 class="serif" th:text="${cat}">分类</h2>
+          <div class="rule"></div>
+          <div class="num" th:text="${#lists.size(items)} + ' 件'">0 件</div>
+        </div>
+        <div class="th100-grid">
+          <article
+            th:each="item : ${items}"
+            class="th100-card"
+          >
+            <span class="no" th:text="'№ ' + ${#numbers.formatInteger(item.spec.number, 3)}">
+              № 001
+            </span>
+            <div class="name" th:text="${item.spec.title}">小事</div>
+            <div class="note" th:if="${item.spec.note}" th:text="${item.spec.note}">
+              记录
+            </div>
+            <div class="foot">
+              <span
+                class="th100-pill"
+                th:classappend="${item.spec.status == 'TREASURED'} ? 'treasured' : (${item.spec.status == 'WAITING'} ? 'waiting' : (${item.spec.status == 'LATER'} ? 'later' : 'todo'))"
+                th:text="${item.spec.status == 'TREASURED'} ? '已经珍藏' : (${item.spec.status == 'WAITING'} ? '等待发生' : (${item.spec.status == 'LATER'} ? '留给以后' : '想去做'))"
+              >
+                想去做
+              </span>
+              <span
+                class="date"
+                th:if="${item.spec.doneAt != null}"
+                th:text="${#temporals.format(item.spec.doneAt, 'yy.MM.dd')}"
+              >
+                25.03.08
+              </span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+  </th:block>
+</html>

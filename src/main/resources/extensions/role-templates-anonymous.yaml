@@ -1,0 +1,12 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: plugin-100-things-role-template-anonymous-view-small-things
+  labels:
+    halo.run/role-template: "true"
+    halo.run/hidden: "true"
+    rbac.authorization.halo.run/aggregate-to-anonymous: "true"
+rules:
+  - apiGroups: ["api.hundredthings.plugin.halo.run"]
+    resources: ["smallthings", "smallthings/stats"]
+    verbs: ["get", "list"]

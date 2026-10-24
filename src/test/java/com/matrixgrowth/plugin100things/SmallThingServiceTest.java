@@ -1,0 +1,230 @@
+package com.matrixgrowth.plugin100things;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
+import run.halo.app.extension.Metadata;
+import run.halo.app.extension.ReactiveExtensionClient;
+
+/**
+ * {@link SmallThingService} 的行为测试。
+ *
+ * <p>重点覆盖「增量更新」语义：请求体中为 null 的字段不应覆盖原有值——这与资料库版本的
+ * 增量更新保持一致。
+ */
+@ExtendWith(MockitoExtension.class)
+class SmallThingServiceTest {
+
+    @Mock
+    ReactiveExtensionClient client;
+
+    SmallThingService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new SmallThingService(client);
+    }
+
+    private SmallThing existingThing() {
+        SmallThing thing = new SmallThing();
+        Metadata metadata = new Metadata();
+        metadata.setName("thing-001");
+        metadata.setVersion(1L);
+        thing.setMetadata(metadata);
+        SmallThing.SmallThingSpec spec = new SmallThing.SmallThingSpec();
+        spec.setNumber(1);
+        spec.setTitle("和十七岁的自己聊一次天");
+        spec.setCategory("青春时光");
+        spec.setStatus(SmallThing.SmallThingSpec.Status.TREASURED);
+        spec.setMood(SmallThing.SmallThingSpec.Mood.MOVED);
+        spec.setNote("翻开旧日记，字迹还是那个会为一场雨难过的自己。");
+        spec.setDoneAt(Instant.parse("2025-03-08T00:00:00Z"));
+        thing.setSpec(spec);
+        return thing;
+    }
+
+    @Test
+    void updateShouldKeepUnspecifiedFields() {
+        SmallThing existed = existingThing();
+        when(client.get(eq(SmallThing.class), eq("thing-001"))).thenReturn(Mono.just(existed));
+        when(client.update(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // 请求体只带了心情，其余字段为 null
+        SmallThing patch = new SmallThing();
+        Metadata patchMetadata = new Metadata();
+        patchMetadata.setName("thing-001");
+        patch.setMetadata(patchMetadata);
+        SmallThing.SmallThingSpec patchSpec = new SmallThing.SmallThingSpec();
+        patchSpec.setMood(SmallThing.SmallThingSpec.Mood.SURPRISED);
+        patch.setSpec(patchSpec);
+
+        StepVerifier.create(service.update(patch))
+            .assertNext(updated -> {
+                assertThat(updated.getSpec().getMood())
+                    .isEqualTo(SmallThing.SmallThingSpec.Mood.SURPRISED);
+                // 未指定的字段必须保持原值
+                assertThat(updated.getSpec().getTitle()).isEqualTo("和十七岁的自己聊一次天");
+                assertThat(updated.getSpec().getCategory()).isEqualTo("青春时光");
+                assertThat(updated.getSpec().getStatus())
+                    .isEqualTo(SmallThing.SmallThingSpec.Status.TREASURED);
+                assertThat(updated.getSpec().getNumber()).isEqualTo(1);
+                assertThat(updated.getSpec().getNote()).contains("旧日记");
+                assertThat(updated.getSpec().getDoneAt()).isEqualTo(Instant.parse("2025-03-08T00:00:00Z"));
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void deleteShouldFetchBeforeDelete() {
+        SmallThing existed = existingThing();
+        when(client.get(eq(SmallThing.class), eq("thing-001"))).thenReturn(Mono.just(existed));
+        when(client.delete(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        StepVerifier.create(service.delete("thing-001"))
+            .assertNext(deleted -> assertThat(deleted.getMetadata().getVersion()).isEqualTo(1L))
+            .verifyComplete();
+
+        // 必须传带 version 的对象，否则 Halo 会退化成 insert
+        ArgumentCaptor<SmallThing> captor = ArgumentCaptor.forClass(SmallThing.class);
+        verify(client).delete(captor.capture());
+        assertThat(captor.getValue().getMetadata().getVersion()).isNotNull();
+    }
+
+    @Test
+    void deleteShouldErrorWhenNotFound() {
+        when(client.get(eq(SmallThing.class), eq("missing"))).thenReturn(Mono.empty());
+
+        StepVerifier.create(service.delete("missing"))
+            .expectError(IllegalArgumentException.class)
+            .verify();
+    }
+
+    @Test
+    void updateShouldErrorWhenNotFound() {
+        when(client.get(eq(SmallThing.class), eq("missing"))).thenReturn(Mono.empty());
+
+        SmallThing patch = new SmallThing();
+        Metadata metadata = new Metadata();
+        metadata.setName("missing");
+        patch.setMetadata(metadata);
+        patch.setSpec(new SmallThing.SmallThingSpec());
+
+        StepVerifier.create(service.update(patch))
+            .expectError(IllegalArgumentException.class)
+            .verify();
+    }
+
+    @Test
+    void buildLabelsShouldContainStatusCategoryAndMood() {
+        SmallThing thing = existingThing();
+
+        var labels = service.buildLabels(thing);
+
+        assertThat(labels).containsEntry("hundredthings.halo.run/status", "treasured");
+        assertThat(labels).containsEntry("hundredthings.halo.run/category", "青春时光");
+        assertThat(labels).containsEntry("hundredthings.halo.run/mood", "moved");
+    }
+
+    @Test
+    void countTreasuredShouldOnlyCountTreasured() {
+        SmallThing treasured = existingThing();
+        SmallThing todo = existingThing();
+        todo.getMetadata().setName("thing-002");
+        todo.getSpec().setStatus(SmallThing.SmallThingSpec.Status.TODO);
+
+        // 客户端负责按 predicate 过滤；这里让 mock 真实地应用 predicate，
+        // 从而验证 countTreasured 传入的过滤条件确实只挑出 TREASURED。
+        when(client.list(eq(SmallThing.class), any(), any()))
+            .thenAnswer(invocation -> {
+                java.util.function.Predicate<SmallThing> predicate = invocation.getArgument(1);
+                return reactor.core.publisher.Flux
+                    .fromIterable(List.of(treasured, todo))
+                    .filter(predicate);
+            });
+
+        StepVerifier.create(service.countTreasured())
+            .expectNext(1L)
+            .verifyComplete();
+    }
+
+    @Test
+    void allStatusesAndMoodsShouldCoverFourAndTen() {
+        assertThat(service.allStatuses()).hasSize(4);
+        assertThat(service.allMoods()).hasSize(10);
+        assertThat(service.allMoods()).contains(SmallThing.SmallThingSpec.Mood.OTHER);
+    }
+
+    @Test
+    void createShouldSetStatusBeforePersisting() {
+        SmallThing thing = existingThing();
+        thing.getMetadata().setName(null);
+        when(client.create(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        StepVerifier.create(service.create(thing))
+            .assertNext(created -> {
+                assertThat(created.getStatus()).isNotNull();
+                assertThat(created.getStatus().getPhase()).isEqualTo("TREASURED");
+                assertThat(created.getStatus().getStage()).isEqualTo("TRACKED");
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void listShouldReturnAllThings() {
+        when(client.list(eq(SmallThing.class), any(), any()))
+            .thenReturn(reactor.core.publisher.Flux.just(existingThing()));
+
+        StepVerifier.create(service.list())
+            .expectNextCount(1)
+            .verifyComplete();
+
+        verify(client).list(eq(SmallThing.class), any(), any());
+    }
+
+    @Test
+    void publicCategoriesShouldContainTenGroups() {
+        assertThat(SmallThingPublicEndpoint.defaultCategories()).hasSize(10);
+        assertThat(SmallThingPublicEndpoint.defaultCategories()).contains("好好告别");
+    }
+
+    @Test
+    void statsResponseShouldCarryCount() {
+        var response = new SmallThingConsoleEndpoint.StatsResponse(24L);
+        assertThat(response.treasuredCount()).isEqualTo(24L);
+    }
+
+    @Test
+    void optionsResponseShouldCarryStatusesAndMoods() {
+        var response = new SmallThingConsoleEndpoint.OptionsResponse(
+            List.of("TODO"), List.of("CALM"));
+        assertThat(response.statuses()).containsExactly("TODO");
+        assertThat(response.moods()).containsExactly("CALM");
+    }
+
+    @Test
+    void getShouldReturnEmptyWhenMissing() {
+        when(client.fetch(eq(SmallThing.class), eq("missing"))).thenReturn(Mono.empty());
+
+        StepVerifier.create(service.get("missing"))
+            .verifyComplete();
+
+        verify(client, never()).delete(any());
+    }
+}

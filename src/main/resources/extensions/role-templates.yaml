@@ -1,0 +1,36 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: plugin-100-things-role-template-view-small-things
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "100 件小事"
+    rbac.authorization.halo.run/display-name: "查看小事清单"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:plugin-100-things:smallthing:view"]
+rules:
+  - apiGroups: ["hundredthings.plugin.halo.run"]
+    resources: ["smallthings"]
+    verbs: ["get", "list"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: plugin-100-things-role-template-manage-small-things
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/dependencies: |
+      [ "plugin-100-things-role-template-view-small-things" ]
+    rbac.authorization.halo.run/module: "100 件小事"
+    rbac.authorization.halo.run/display-name: "管理小事清单"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:plugin-100-things:smallthing:manage"]
+rules:
+  - apiGroups: ["hundredthings.plugin.halo.run"]
+    resources: ["smallthings"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: ["console.api.hundredthings.plugin.halo.run"]
+    resources: ["smallthings", "smallthings/stats", "smallthings/options"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
