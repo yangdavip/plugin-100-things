@@ -70,11 +70,11 @@ public class SmallThingPublicEndpoint implements CustomEndpoint {
     /**
      * 供前台使用的分类常量。
      *
+     * <p>委托给 {@link SmallThingService#defaultCategories()}，保持单一真源。
+     *
      * @return 十个分类
      */
     public static List<String> defaultCategories() {
-        return List.of(
-            "青春时光", "生活日常", "朋友之间", "一个人的浪漫", "小小远方",
-            "关于热爱", "勇敢一点", "感受世界", "留下痕迹", "好好告别");
+        return SmallThingService.defaultCategories();
     }
 }

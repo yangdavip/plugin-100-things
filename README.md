@@ -34,12 +34,23 @@
 
 | 变量 | 说明 |
 | --- | --- |
-| `smallThings` | 小事列表（`SmallThing` 扩展对象） |
+| `groups` | 已按分类分好组的小事，元素为 `{ category, items }`；分类顺序固定，空分类不出现 |
+| `smallThings` | 小事列表（`SmallThing` 扩展对象，未分组） |
 | `treasuredCount` | 已珍藏件数 |
 | `_templateId` | 固定为 `plugin:plugin-100-things:small-things` |
 
 主题侧若提供 `templates/layout.html` 并符合页面布局契约，插件页面会自动复用主题的页头与页脚；
 否则回退到 Halo 内置布局。
+
+### 写自定义模板时的两个坑
+
+自己写 `small-things.html` 时请直接用 `groups` 遍历，**不要**在模板里筛分类：
+
+- `${smallThings.?[spec.category == cat]}` —— SpEL 集合选择取不到外层 `th:each` 的循环变量，会抛
+  `EL1008E`；而同一元素上 `th:if`（优先级 300）先于 `th:with`（600）求值，异常会被吞成
+  「整页只剩标题、一条记录都没有」。
+- `spec.status` / `spec.mood` 是**枚举**，写成 `${item.spec.status == 'TREASURED'}` 恒为 false，
+  页面不报错，只是所有卡片都显示成「想去做」。请用 `${item.spec.status?.name() == 'TREASURED'}`。
 
 ## 安装
 

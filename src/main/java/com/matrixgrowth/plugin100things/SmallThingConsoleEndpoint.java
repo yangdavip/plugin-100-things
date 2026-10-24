@@ -31,14 +31,18 @@ public class SmallThingConsoleEndpoint implements CustomEndpoint {
 
     @Override
     public RouterFunction<ServerResponse> endpoint() {
+        // ⚠ 顺序有意义：RouterFunction 按注册顺序匹配，"/smallthings/{name}" 会吃掉
+        // "/smallthings/stats" 与 "/smallthings/options"（把 stats 当成一条记录的名字），
+        // 结果这两个接口稳定返回 404，而页面只是「进度显示 0、下拉框为空」——
+        // 表现为功能缺陷而不是报错。字面量路径必须排在路径变量之前。
         return RouterFunctions.route()
             .GET("/smallthings", this::listSmallThings)
+            .GET("/smallthings/stats", this::stats)
+            .GET("/smallthings/options", this::options)
             .GET("/smallthings/{name}", this::getSmallThing)
             .POST("/smallthings", this::createSmallThing)
             .PUT("/smallthings/{name}", this::updateSmallThing)
             .DELETE("/smallthings/{name}", this::deleteSmallThing)
-            .GET("/smallthings/stats", this::stats)
-            .GET("/smallthings/options", this::options)
             .build();
     }
 

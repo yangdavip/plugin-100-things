@@ -131,6 +131,97 @@ class SmallThingServiceTest {
     }
 
     @Test
+    void saveShouldPersistLabelsAsIsWithoutRefetching() {
+        // 回归守卫：Reconciler 通过 save 写回 labels + status。
+        // update（增量语义）会重新 get 一次、只合并 spec，把调用方设置的 labels 丢掉，
+        // 真实环境中因此每条记录的 label 都写不进去（单元测试当时 mock 了 service 没察觉）。
+        SmallThing thing = existingThing();
+        thing.getMetadata().setLabels(
+            java.util.Map.of("hundredthings.halo.run/status", "treasured"));
+
+        ArgumentCaptor<SmallThing> captor = ArgumentCaptor.forClass(SmallThing.class);
+        when(client.update(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        StepVerifier.create(service.save(thing))
+            .assertNext(saved -> assertThat(saved.getMetadata().getLabels())
+                .containsEntry("hundredthings.halo.run/status", "treasured"))
+            .verifyComplete();
+
+        verify(client).update(captor.capture());
+        assertThat(captor.getValue().getMetadata().getLabels())
+            .containsEntry("hundredthings.halo.run/status", "treasured");
+        // 全量保存不得再回库取对象：既多一次往返，也会让调用方手里的 labels 失效
+        verify(client, never()).get(any(), any());
+    }
+
+    @Test
+    void updateShouldKeepExistingLabelsFromDatabase() {
+        // 增量更新虽然不能覆盖调用方设置的新 label，但绝不能把库里已有的 label 抹掉
+        SmallThing existed = existingThing();
+        existed.getMetadata().setLabels(
+            java.util.Map.of("hundredthings.halo.run/status", "treasured"));
+        when(client.get(eq(SmallThing.class), eq("thing-001"))).thenReturn(Mono.just(existed));
+
+        ArgumentCaptor<SmallThing> captor = ArgumentCaptor.forClass(SmallThing.class);
+        when(client.update(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        SmallThing patch = new SmallThing();
+        Metadata patchMetadata = new Metadata();
+        patchMetadata.setName("thing-001");
+        patch.setMetadata(patchMetadata);
+        SmallThing.SmallThingSpec patchSpec = new SmallThing.SmallThingSpec();
+        patchSpec.setStatus(SmallThing.SmallThingSpec.Status.TODO);
+        patch.setSpec(patchSpec);
+
+        StepVerifier.create(service.update(patch)).expectNextCount(1).verifyComplete();
+
+        verify(client).update(captor.capture());
+        assertThat(captor.getValue().getMetadata().getLabels())
+            .containsEntry("hundredthings.halo.run/status", "treasured");
+    }
+
+    @Test
+    void groupByCategoryShouldFollowCanonicalOrderAndDropEmptyGroups() {
+        SmallThing first = existingThing();
+        SmallThing second = existingThing();
+        second.getMetadata().setName("thing-002");
+        second.getSpec().setCategory("留下痕迹");
+        SmallThing third = existingThing();
+        third.getMetadata().setName("thing-003");
+
+        var groups = service.groupByCategory(List.of(first, second, third));
+
+        // 空分类不出现；顺序按 defaultCategories（青春时光 在 留下痕迹 之前）
+        assertThat(groups).extracting(SmallThingService.CategoryGroup::category)
+            .containsExactly("青春时光", "留下痕迹");
+        assertThat(groups.get(0).items()).hasSize(2);
+        assertThat(groups.get(1).items()).hasSize(1);
+    }
+
+    @Test
+    void groupByCategoryShouldKeepCategoryOutsideTheCanonicalList() {
+        SmallThing custom = existingThing();
+        custom.getSpec().setCategory("自己加的分类");
+
+        var groups = service.groupByCategory(List.of(custom));
+
+        // 用户自定义的分类不能被丢掉，只是排在规范分类之后
+        assertThat(groups).extracting(SmallThingService.CategoryGroup::category)
+            .containsExactly("自己加的分类");
+    }
+
+    @Test
+    void groupByCategoryShouldTolerateEmptyAndUncategorizedInput() {
+        SmallThing noCategory = existingThing();
+        noCategory.getSpec().setCategory(null);
+
+        assertThat(service.groupByCategory(List.of())).isEmpty();
+        assertThat(service.groupByCategory(List.of(noCategory))).isEmpty();
+    }
+
+    @Test
     void buildLabelsShouldContainStatusCategoryAndMood() {
         SmallThing thing = existingThing();
 

@@ -1,6 +1,7 @@
 package com.matrixgrowth.plugin100things;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,7 +67,28 @@ public class SmallThingService {
     }
 
     /**
-     * 更新一条小事。
+     * 全量保存：把传入对象原样写回，不做任何字段合并。
+     *
+     * <p><b>必须与 {@link #update(SmallThing)} 区分开</b>：{@code update} 是给「控制台只提交
+     * 改动过的几个字段」用的增量语义，它会重新从库里取一次对象、只覆盖 spec；
+     * 调用方在内存里设置的其他字段（典型是 metadata.labels）会被静默丢弃。
+     *
+     * <p>调谐器拿到的本来就是一个完整对象（自己 fetch 的），它的写入意图是「整份写回」，
+     * 必须走这里。真实环境曾因此丢掉 Reconciler 写入的 label，而单元测试因为 mock 了
+     * service 完全没察觉。
+     *
+     * @param smallThing 完整的小事对象（metadata.name 与 metadata.version 必填）
+     * @return 保存后的小事
+     */
+    public Mono<SmallThing> save(SmallThing smallThing) {
+        Assert.notNull(smallThing, "小事不能为空");
+        Assert.notNull(smallThing.getMetadata(), "小事元数据不能为空");
+        Assert.hasText(smallThing.getMetadata().getName(), "小事名称不能为空");
+        return client.update(smallThing);
+    }
+
+    /**
+     * 更新一条小事（增量语义，会重新从库里取对象并只覆盖 spec）。
      *
      * <p>仅覆盖请求体中携带的字段，未携带的字段保持原值——这与资料库版本的「增量更新」语义一致。
      *
@@ -157,6 +179,63 @@ public class SmallThingService {
         status.setStage("TRACKED");
         status.setObservedTime(Instant.now());
         return status;
+    }
+
+    /**
+     * 十个分类的规范顺序（清单与前台展示都以它为准）。
+     *
+     * <p>这是**唯一真源**：模板不再写死一份分类数组，否则两边迟早漂移
+     * （改了一个分类，另一处还是旧值，且不会报错）。
+     *
+     * @return 分类名列表
+     */
+    public static List<String> defaultCategories() {
+        return List.of(
+            "青春时光", "生活日常", "朋友之间", "一个人的浪漫", "小小远方",
+            "关于热爱", "勇敢一点", "感受世界", "留下痕迹", "好好告别");
+    }
+
+    /**
+     * 按分类分组，供前台模板直接遍历。
+     *
+     * <p>分组放在 Java 侧而不是模板里，是因为模板侧的 SpEL 集合选择
+     * {@code smallThings.?[spec.category == cat]} 取不到外层 {@code th:each} 的循环变量，
+     * 会抛 {@code EL1008E}；而同一元素上 {@code th:if} 又先于 {@code th:with} 求值，
+     * 失败时表现为「整页只有标题、一条记录都没有」的静默空列表。
+     *
+     * <p>顺序遵循 {@link #defaultCategories()}；清单里出现规范之外的分类时追加在末尾，
+     * 不会被丢弃。空分组不返回。
+     *
+     * @param things 小事列表
+     * @return 按分类分组后的结果
+     */
+    public List<CategoryGroup> groupByCategory(List<SmallThing> things) {
+        Map<String, List<SmallThing>> grouped = new LinkedHashMap<>();
+        for (String category : defaultCategories()) {
+            grouped.put(category, new ArrayList<>());
+        }
+        if (things != null) {
+            for (SmallThing thing : things) {
+                String category = thing.getSpec() == null ? null : thing.getSpec().getCategory();
+                if (category == null || category.isBlank()) {
+                    continue;
+                }
+                grouped.computeIfAbsent(category, key -> new ArrayList<>()).add(thing);
+            }
+        }
+        return grouped.entrySet().stream()
+            .filter(entry -> !entry.getValue().isEmpty())
+            .map(entry -> new CategoryGroup(entry.getKey(), List.copyOf(entry.getValue())))
+            .toList();
+    }
+
+    /**
+     * 一个分类下的小事集合（前台模板的数据契约）。
+     *
+     * @param category 分类名
+     * @param items 该分类下的小事
+     */
+    public record CategoryGroup(String category, List<SmallThing> items) {
     }
 
     /**

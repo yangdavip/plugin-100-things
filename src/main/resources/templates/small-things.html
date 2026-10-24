@@ -239,20 +239,21 @@
         这张清单还没有被填写。
       </div>
 
-      <div
-        th:each="cat : ${ {'青春时光','生活日常','朋友之间','一个人的浪漫','小小远方','关于热爱','勇敢一点','感受世界','留下痕迹','好好告别'} }"
-        class="th100-group"
-        th:with="items = ${smallThings.?[spec.category == cat]}"
-        th:if="${!#lists.isEmpty(items)}"
-      >
+      <!--
+        分组数据由 Java 侧提供（model.groups），模板不再自己筛选。
+        不要在模板里用 ${smallThings.?[spec.category == cat]}：选择表达式取不到外层
+        循环变量会抛 EL1008E；而 th:if(300) 先于 th:with(600) 求值，失败时表现为
+        「只剩标题、一条记录都没有」的静默空列表（真实环境实测过）。
+      -->
+      <div class="th100-group" th:each="group : ${groups}">
         <div class="th100-group-head">
-          <h2 class="serif" th:text="${cat}">分类</h2>
+          <h2 class="serif" th:text="${group.category}">分类</h2>
           <div class="rule"></div>
-          <div class="num" th:text="${#lists.size(items)} + ' 件'">0 件</div>
+          <div class="num" th:text="${#lists.size(group.items)} + ' 件'">0 件</div>
         </div>
         <div class="th100-grid">
           <article
-            th:each="item : ${items}"
+            th:each="item : ${group.items}"
             class="th100-card"
           >
             <span class="no" th:text="'№ ' + ${#numbers.formatInteger(item.spec.number, 3)}">
@@ -263,11 +264,16 @@
               记录
             </div>
             <div class="foot">
-              <span
-                class="th100-pill"
-                th:classappend="${item.spec.status == 'TREASURED'} ? 'treasured' : (${item.spec.status == 'WAITING'} ? 'waiting' : (${item.spec.status == 'LATER'} ? 'later' : 'todo'))"
-                th:text="${item.spec.status == 'TREASURED'} ? '已经珍藏' : (${item.spec.status == 'WAITING'} ? '等待发生' : (${item.spec.status == 'LATER'} ? '留给以后' : '想去做'))"
-              >
+                <!--
+                  spec.status 是 Java 枚举，模板里必须用 .name() 比字符串。
+                  直接写 ${item.spec.status == 'TREASURED'} 永远是 false（枚举不隐式转 String），
+                  页面不会报错，只是 100 张卡片全显示成「想去做」——真实环境实测过。
+                -->
+                <span
+                  class="th100-pill"
+                  th:classappend="${#strings.toLowerCase(item.spec.status?.name() ?: 'TODO')}"
+                  th:text="${item.spec.status?.name() == 'TREASURED'} ? '已经珍藏' : (${item.spec.status?.name() == 'WAITING'} ? '等待发生' : (${item.spec.status?.name() == 'LATER'} ? '留给以后' : '想去做'))"
+                >
                 想去做
               </span>
               <span

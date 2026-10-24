@@ -56,7 +56,9 @@ public class SmallThingReconciler implements Reconciler<Reconciler.Request> {
                 }
                 thing.setStatus(status);
                 thing.getMetadata().setLabels(labels);
-                return service.update(thing);
+                // 必须走 save（全量写回）：update 会重新从库里取对象、只合并 spec，
+                // 这里刚设置的 labels 会被静默丢掉（真实环境实测过）。
+                return service.save(thing);
             })
             .block();
         return Result.doNotRetry();

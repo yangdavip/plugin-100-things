@@ -50,6 +50,9 @@ public class SmallThingPageRouter {
             .flatMap(items -> {
                 Map<String, Object> model = new HashMap<>();
                 model.put("smallThings", items);
+                // 分组在 Java 侧算好：模板里用 SpEL 集合选择取不到外层循环变量（EL1008E），
+                // 而 th:if 先于 th:with 求值会让失败退化成「静默空列表」。
+                model.put("groups", service.groupByCategory(items));
                 model.put("treasuredCount",
                     items.stream()
                         .filter(item -> item.getSpec() != null
