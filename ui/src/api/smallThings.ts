@@ -137,19 +137,44 @@ export function updateSmallThing(
   })
 }
 
-/** 创建一条小事。 */
-export function createSmallThing(
-  spec: SmallThing['spec']
-): Promise<SmallThing> {
-  return consoleApi<SmallThing>('/smallthings', {
-    method: 'post',
-    data: { spec },
-  })
+/**
+ * 展示配置。
+ *
+ * 清单文案（编号 / 标题 / 分类）是内置内容，没有创建、删除入口，
+ * 更新也只接受进度字段——所以这里没有任何「新增小事」的 API。
+ */
+export interface SmallThingSettings {
+  pageTitle: string
+  pageSubtitle: string
+  pageQuote: string
+  footerNote: string
+  showProgress: boolean
+  groupByCategory: boolean
 }
 
-/** 删除一条小事。 */
-export function deleteSmallThing(name: string): Promise<SmallThing> {
-  return consoleApi<SmallThing>(`/smallthings/${name}`, { method: 'delete' })
+/** 配置接口的响应。 */
+export interface SettingsResponse {
+  /** 前台访问路径，由后端路由常量给出。 */
+  pagePath: string
+  /** 当前生效的配置。 */
+  config: SmallThingSettings
+  /** 后端默认配置，供「恢复默认」使用。 */
+  defaults: SmallThingSettings
+}
+
+/** 读取展示配置。 */
+export function fetchSettings(): Promise<SettingsResponse> {
+  return consoleApi<SettingsResponse>('/settings')
+}
+
+/** 保存展示配置（改完立即生效，不需要重启插件）。 */
+export function saveSettings(
+  config: SmallThingSettings
+): Promise<SettingsResponse> {
+  return consoleApi<SettingsResponse>('/settings', {
+    method: 'put',
+    data: config,
+  })
 }
 
 /** 统计响应。 */

@@ -29,11 +29,15 @@ class SmallThingConsoleEndpointTest {
     @Mock
     SmallThingService service;
 
+    @Mock
+    SmallThingConfigService configService;
+
     WebTestClient client;
 
     @BeforeEach
     void setUp() {
-        SmallThingConsoleEndpoint endpoint = new SmallThingConsoleEndpoint(service);
+        SmallThingConsoleEndpoint endpoint =
+            new SmallThingConsoleEndpoint(service, configService);
         client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
     }
 
@@ -109,5 +113,51 @@ class SmallThingConsoleEndpointTest {
             .expectStatus().isOk()
             .expectBody()
             .jsonPath("$.spec.title").isEqualTo("和十七岁的自己聊一次天");
+    }
+
+    @Test
+    void settingsShouldExposePagePathAndDefaults() {
+        when(configService.load()).thenReturn(Mono.just(new SmallThingConfig()));
+
+        client.get().uri("/settings")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.pagePath").isEqualTo(SmallThingPageRouter.PAGE_PATH)
+            .jsonPath("$.config.pageTitle")
+            .isEqualTo(SmallThingConfig.DEFAULT_PAGE_TITLE)
+            // 默认值由后端给出，前端不再抄一份，避免两边默认文案漂移
+            .jsonPath("$.defaults.pageTitle")
+            .isEqualTo(SmallThingConfig.DEFAULT_PAGE_TITLE);
+    }
+
+    @Test
+    void updatingSettingsShouldReturnSavedConfig() {
+        SmallThingConfig saved = new SmallThingConfig();
+        saved.setPageTitle("我的清单");
+        saved.setShowProgress(false);
+        when(configService.save(any(SmallThingConfig.class))).thenReturn(Mono.just(saved));
+
+        client.put().uri("/settings")
+            .bodyValue(new SmallThingConfig())
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.config.pageTitle").isEqualTo("我的清单")
+            .jsonPath("$.config.showProgress").isEqualTo(false);
+    }
+
+    @Test
+    void contentWriteEndpointsMustNotExist() {
+        // 清单文案是内置内容：没有创建、没有删除入口。
+        // 这里用 404 作为判据——如果哪天有人把 POST/DELETE 加回来，这条会红。
+        client.post().uri("/smallthings")
+            .bodyValue(thing())
+            .exchange()
+            .expectStatus().isNotFound();
+
+        client.delete().uri("/smallthings/smallthing-001")
+            .exchange()
+            .expectStatus().isNotFound();
     }
 }

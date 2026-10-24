@@ -58,4 +58,22 @@ class SmallThingTemplateTest {
         // 模板里再写一份，改分类时两边必然漂移且不会报错。
         assertThat(template).doesNotContain("一个人的浪漫");
     }
+
+    @Test
+    void templateMustBeReadOnlyForEveryone() {
+        // 前台展示页对任何人只读：模板里不能出现任何可提交的控件。
+        // 界面藏起来不算数——真正的约束在服务层（改文案会被拒成 400），
+        // 这条守卫只是保证「页面本身也不提供入口」。
+        assertThat(template).doesNotContain("<form");
+        assertThat(template).doesNotContain("<input");
+        assertThat(template).doesNotContain("<textarea");
+    }
+
+    @Test
+    void templateMustTakeCopyFromSettings() {
+        // 标题写死在模板里，控制台的「页面标题」就永远不生效（且不报错）
+        assertThat(template).contains("${settings.pageTitle}");
+        assertThat(template).contains("${settings.pageSubtitle}");
+        assertThat(template).contains("${treasuredCount}");
+    }
 }

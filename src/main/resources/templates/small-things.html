@@ -4,8 +4,8 @@
   th:replace="~{layout :: html(head = ~{::head}, content = ~{::content})}"
 >
   <th:block th:fragment="head">
-    <title>100 件小事 - [[${site.title}]]</title>
-    <meta name="description" content="短暂人生，你想做的 100 件事情" />
+    <title>[[${settings.pageTitle}]] - [[${site.title}]]</title>
+    <meta name="description" th:content="${settings.pageQuote}" />
   </th:block>
 
   <th:block th:fragment="content">
@@ -213,6 +213,15 @@
         color: var(--ink-faint);
         font-size: 13.5px;
       }
+      .th100-foot {
+        margin-top: 42px;
+        padding-top: 22px;
+        border-top: 1px dashed var(--line);
+        text-align: center;
+        color: var(--ink-faint);
+        font-size: 12.5px;
+        letter-spacing: 0.6px;
+      }
       @media (max-width: 640px) {
         .th100-grid {
           grid-template-columns: 1fr;
@@ -221,13 +230,15 @@
     </style>
 
     <div class="th100">
+      <!-- 标题、副标题、引言、进度条与分组方式都来自控制台「100 件小事 → 配置」，
+           存于 ConfigMap，改完下一次请求即生效。 -->
       <div class="th100-head">
-        <h1 class="serif">短暂人生，你想做的 100 件事情</h1>
-        <div class="sub">一百件小事 · 一生的清单</div>
-        <div class="quote">有些事情不是为了完成，而是为了记住。</div>
+        <h1 class="serif" th:text="${settings.pageTitle}">短暂人生，你想做的 100 件事情</h1>
+        <div class="sub" th:text="${settings.pageSubtitle}">一百件小事 · 一生的清单</div>
+        <div class="quote" th:text="${settings.pageQuote}">有些事情不是为了完成，而是为了记住。</div>
       </div>
 
-      <div class="th100-bar">
+      <div class="th100-bar" th:if="${settings.showProgress}">
         <span class="txt">已珍藏 <b th:text="${treasuredCount}">0</b> / 100 件</span>
         <span class="track">
           <span class="fill" th:style="'width:' + ${treasuredCount} + '%'"></span>
@@ -244,9 +255,12 @@
         不要在模板里用 ${smallThings.?[spec.category == cat]}：选择表达式取不到外层
         循环变量会抛 EL1008E；而 th:if(300) 先于 th:with(600) 求值，失败时表现为
         「只剩标题、一条记录都没有」的静默空列表（真实环境实测过）。
+
+        平铺模式下 Java 侧会返回唯一一个 category 为 null 的分组，
+        因此这里只需判断「有没有分类名」决定要不要画分组标题。
       -->
       <div class="th100-group" th:each="group : ${groups}">
-        <div class="th100-group-head">
+        <div class="th100-group-head" th:if="${group.category != null}">
           <h2 class="serif" th:text="${group.category}">分类</h2>
           <div class="rule"></div>
           <div class="num" th:text="${#lists.size(group.items)} + ' 件'">0 件</div>
@@ -286,6 +300,14 @@
             </div>
           </article>
         </div>
+      </div>
+
+      <div
+        class="th100-foot"
+        th:if="${settings.footerNote != null and !#strings.isEmpty(settings.footerNote)}"
+        th:text="${settings.footerNote}"
+      >
+        —— 那些小事，都算数。
       </div>
     </div>
   </th:block>

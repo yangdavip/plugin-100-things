@@ -13,6 +13,10 @@ rules:
   - apiGroups: ["hundredthings.plugin.halo.run"]
     resources: ["smallthings"]
     verbs: ["get", "list"]
+  # 控制台页面一进来就要读配置（标题、开关），所以查看角色也需要 settings 的读权限。
+  - apiGroups: ["console.api.hundredthings.plugin.halo.run"]
+    resources: ["smallthings", "smallthings/stats", "smallthings/options", "settings"]
+    verbs: ["get", "list"]
 ---
 apiVersion: v1alpha1
 kind: Role
@@ -28,9 +32,11 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: |
       ["plugin:plugin-100-things:smallthing:manage"]
 rules:
+  # 清单文案不可编辑：这里刻意没有 create / delete；
+  # update 也只到进度字段（接口会拒绝改动标题、分类、编号的请求）。
   - apiGroups: ["hundredthings.plugin.halo.run"]
     resources: ["smallthings"]
-    verbs: ["get", "list", "create", "update", "patch", "delete"]
+    verbs: ["get", "list", "update", "patch"]
   - apiGroups: ["console.api.hundredthings.plugin.halo.run"]
-    resources: ["smallthings", "smallthings/stats", "smallthings/options"]
-    verbs: ["get", "list", "create", "update", "patch", "delete"]
+    resources: ["smallthings", "smallthings/stats", "smallthings/options", "settings"]
+    verbs: ["get", "list", "update", "patch"]

@@ -20,7 +20,7 @@ spec:
   repo: https://github.com/yangdavip/plugin-100-things
   issues: https://github.com/yangdavip/plugin-100-things/issues
   displayName: "100 件小事"
-  description: "人生小事清单：内置 100 件想做成的小事，支持打卡、记录心情与一句话备忘，并在博客前台展示清单与进度。"
+  description: "人生小事清单：内置 100 件想做成的小事，前台 /plugin-100-things 只读展示；后台可配置文案与展示方式，打卡只记录进度、不改清单内容。"
   license:
     - name: "GPL-3.0"
       url: "https://github.com/yangdavip/plugin-100-things/blob/main/LICENSE"

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import run.halo.app.extension.Metadata;
@@ -317,5 +318,91 @@ class SmallThingServiceTest {
             .verifyComplete();
 
         verify(client, never()).delete(any());
+    }
+
+    @Test
+    void updateShouldRejectContentChanges() {
+        when(client.get(eq(SmallThing.class), eq("thing-001")))
+            .thenReturn(Mono.just(existingThing()));
+
+        SmallThing patch = new SmallThing();
+        Metadata metadata = new Metadata();
+        metadata.setName("thing-001");
+        patch.setMetadata(metadata);
+        SmallThing.SmallThingSpec patchSpec = new SmallThing.SmallThingSpec();
+        patchSpec.setTitle("擅自改掉的标题");
+        patch.setSpec(patchSpec);
+
+        StepVerifier.create(service.update(patch))
+            .expectErrorSatisfies(error -> {
+                assertThat(error).isInstanceOf(ResponseStatusException.class);
+                assertThat(((ResponseStatusException) error).getStatusCode().value())
+                    .isEqualTo(400);
+            })
+            .verify();
+
+        // 关键：被拒绝时不能有任何写库动作，否则就是「报了错但还是改了」
+        verify(client, never()).update(any());
+    }
+
+    @Test
+    void updateShouldRejectCategoryChange() {
+        when(client.get(eq(SmallThing.class), eq("thing-001")))
+            .thenReturn(Mono.just(existingThing()));
+
+        SmallThing patch = new SmallThing();
+        Metadata metadata = new Metadata();
+        metadata.setName("thing-001");
+        patch.setMetadata(metadata);
+        SmallThing.SmallThingSpec patchSpec = new SmallThing.SmallThingSpec();
+        patchSpec.setCategory("换个分类");
+        patch.setSpec(patchSpec);
+
+        StepVerifier.create(service.update(patch))
+            .expectError(ResponseStatusException.class)
+            .verify();
+
+        verify(client, never()).update(any());
+    }
+
+    @Test
+    void updateShouldAllowUnchangedContentBeingResent() {
+        // 控制台回传的是整份对象，内容没变时必须放行，否则连打卡都存不了
+        when(client.get(eq(SmallThing.class), eq("thing-001")))
+            .thenReturn(Mono.just(existingThing()));
+        when(client.update(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        SmallThing patch = new SmallThing();
+        Metadata metadata = new Metadata();
+        metadata.setName("thing-001");
+        patch.setMetadata(metadata);
+        SmallThing.SmallThingSpec patchSpec = new SmallThing.SmallThingSpec();
+        patchSpec.setNumber(1);
+        patchSpec.setTitle("和十七岁的自己聊一次天");
+        patchSpec.setCategory("青春时光");
+        patchSpec.setStatus(SmallThing.SmallThingSpec.Status.WAITING);
+        patch.setSpec(patchSpec);
+
+        StepVerifier.create(service.update(patch)).expectNextCount(1).verifyComplete();
+    }
+
+    @Test
+    void groupByCategoryShouldCollapseIntoOneGroupWhenDisabled() {
+        SmallThing first = existingThing();
+        SmallThing second = existingThing();
+        second.getMetadata().setName("thing-002");
+        second.getSpec().setNumber(2);
+        second.getSpec().setCategory("留下痕迹");
+
+        var groups = service.groupByCategory(List.of(second, first), false);
+
+        // 平铺模式：只有一个分组，且没有分类名（模板据此不画分组标题）
+        assertThat(groups).hasSize(1);
+        assertThat(groups.get(0).category()).isNull();
+        assertThat(groups.get(0).items()).hasSize(2);
+        // 仍然按编号升序，不能因为「平铺」就丢了排序
+        assertThat(groups.get(0).items()).extracting(item -> item.getSpec().getNumber())
+            .containsExactly(1, 2);
     }
 }

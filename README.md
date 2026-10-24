@@ -3,7 +3,8 @@
 > 短暂人生，你想做的 100 件事情。
 
 一个为 Halo 博客设计的「人生小事清单」插件：内置 100 件想做成的小事，支持打卡、记录心情与一句话备忘，
-并在博客前台提供只读的清单展示页。
+并在博客前台提供**只读**的清单展示页（`/plugin-100-things`）。清单文案属于内置内容，任何入口都不允许编辑；
+控制台里可配置的是展示方式（标题、副标题、引言、页脚、进度条、是否分组）。
 
 - **应用市场**：[待上架](https://www.halo.run/uc/developer/apps)
 - **兼容 Halo**：`>=2.27.0`
@@ -13,19 +14,28 @@
 
 ### 管理端（Console）
 
-插件在 Console 中新增一个「内容 → 100 件小事」页面：
+插件在 Console 中新增一个「内容 → 100 件小事」页面，默认打开的是**配置页**：
 
-- **100 件小事卡片墙**：按十个分类分组展示 100 张卡片，每张显示编号、小事名、状态胶囊、完成日期与照片标记。
-- **搜索与筛选**：支持按小事名、一句话记录、编号做关键词搜索，并可按分类下拉筛选。
+- **配置（默认页签）**：页面标题、副标题、引言、页脚签名，以及「显示进度条」「按分类分组」两个开关。
+  配置存在插件自己的 ConfigMap（`plugin-100-things-config`）里，保存后前台下一次请求即生效，
+  **不需要重启插件，也不需要重新发版**。配置页同时给出前台地址与「打开前台」入口。
+- **小事清单**：按十个分类分组展示 100 张卡片，每张显示编号、小事名、状态胶囊、完成日期与照片标记；
+  支持按小事名 / 一句话记录 / 编号搜索，并可按分类筛选。
 - **记录面板**：点击任意卡片即可打开面板，修改状态（想去做 / 等待发生 / 已经珍藏 / 留给以后）、完成日期、
   心情（10 种）、一句话记录；保存时**只提交发生变化的字段**，其余字段保持原值。
-- **我的生活章节**：Lv.1 → Lv.6 六个章节（阈值 0 / 20 / 40 / 60 / 80 / 100 件）的进度线，
+- **生活章节**：Lv.1 → Lv.6 六个章节（阈值 0 / 20 / 40 / 60 / 80 / 100 件）的进度线，
   以及已珍藏件数、最近心情 Top3、人生关键词云、写给现在的自己、最近珍藏时间线。
-- **顶部实时进度条**：已珍藏 n/100、当前章节等级、距下一章还差多少件。
+
+> **清单文案不可编辑**：编号、标题、分类来自内置种子数据，没有创建、没有删除入口，
+> 更新也只接受进度字段（状态 / 日期 / 心情 / 一句话）。改文案会被后端拒绝为 `400`，
+> 不只是界面上藏起来。
 
 ### 博客前台
 
-插件提供前台页面 `/small-things`，以奶油纸感手账风格展示清单与已珍藏进度。
+插件提供前台页面 **`/plugin-100-things`**（即「博客域名/plugin-100-things」），
+以奶油纸感手账风格展示清单与已珍藏进度，对访客只读。
+
+旧版本用过的 `/small-things` 会 **302 跳转**到新地址，已有的链接不会变成 404。
 
 前台默认使用插件自带的模板（`templates/small-things.html`）；若当前主题提供了同名的
 `small-things.html` 模板，则**优先使用主题的模板**，主题可以完全接管展示样式。
@@ -34,7 +44,8 @@
 
 | 变量 | 说明 |
 | --- | --- |
-| `groups` | 已按分类分好组的小事，元素为 `{ category, items }`；分类顺序固定，空分类不出现 |
+| `settings` | 展示配置（`pageTitle` / `pageSubtitle` / `pageQuote` / `footerNote` / `showProgress` / `groupByCategory`） |
+| `groups` | 已按分类分好组的小事，元素为 `{ category, items }`；分类顺序固定，空分类不出现。关闭「按分类分组」时只有一组、`category` 为 `null` |
 | `smallThings` | 小事列表（`SmallThing` 扩展对象，未分组） |
 | `treasuredCount` | 已珍藏件数 |
 | `_templateId` | 固定为 `plugin:plugin-100-things:small-things` |
@@ -68,10 +79,11 @@
 
 ## 使用
 
-1. 进入 Console 的「内容 → 100 件小事」。
-2. 逐条点击卡片，把完成的那些标记为「已经珍藏」，并写下完成日期、当时的心情和一句话记录。
-3. 切到「我的生活章节」查看进度：已珍藏件数、心情分布、关键词云与最近珍藏时间线。
-4. 博客访客可以访问 `https://你的站点/small-things` 查看清单（只读，免登录）。
+1. 进入 Console 的「内容 → 100 件小事」，默认落在**配置**页签：按需改标题、副标题、引言、页脚，
+   以及是否显示进度条、是否按分类分组，保存即可。
+2. 切到「小事清单」，逐条点击卡片，把完成的那些标记为「已经珍藏」，并写下完成日期、当时的心情和一句话记录。
+3. 切到「生活章节」查看进度：已珍藏件数、心情分布、关键词云与最近珍藏时间线。
+4. 博客访客可以访问 `https://你的站点/plugin-100-things` 查看清单（只读，免登录，任何人都不能修改内容）。
 
 ## 权限与角色
 
@@ -123,12 +135,14 @@ pnpm test:unit     # 单元测试
 src/main/java/com/matrixgrowth/plugin100things/
 ├── Plugin100ThingsPlugin.java     # 插件主类：注册 Scheme + 写入预置数据
 ├── SmallThing.java                 # 自定义模型（编号/小事/分类/状态/日期/心情/记录/照片）
-├── SmallThingService.java          # 业务逻辑：列表、增量更新、删除
+├── SmallThingService.java          # 业务逻辑：列表、增量更新（仅进度）、分组
+├── SmallThingConfig.java           # 展示配置模型（标题/副标题/引言/页脚/两个开关）
+├── SmallThingConfigService.java    # 配置读写：ConfigMap plugin-100-things-config
 ├── SmallThingReconciler.java       # 调谐器：幂等维护 status 与 label
 ├── SmallThingInitializer.java      # 首次启用写入 100 条预置数据
-├── SmallThingConsoleEndpoint.java  # Console 端 API（需登录）
+├── SmallThingConsoleEndpoint.java  # Console 端 API（配置 + 打卡，需登录）
 ├── SmallThingPublicEndpoint.java   # 前台公开 API（只读）
-└── SmallThingPageRouter.java       # 博客前台路由 /small-things
+└── SmallThingPageRouter.java       # 博客前台路由 /plugin-100-things（旧路径 302）
 src/main/resources/
 ├── plugin.yaml                     # 插件清单
 ├── extensions/                     # 角色模板

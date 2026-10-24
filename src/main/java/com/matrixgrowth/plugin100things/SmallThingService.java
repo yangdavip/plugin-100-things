@@ -6,8 +6,11 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ReactiveExtensionClient;
@@ -150,6 +153,7 @@ public class SmallThingService {
         SmallThing.SmallThingSpec oldSpec = existed.getSpec();
         SmallThing.SmallThingSpec newSpec = incoming.getSpec();
         if (newSpec != null) {
+            assertContentUnchanged(oldSpec, newSpec);
             SmallThing.SmallThingSpec spec = new SmallThing.SmallThingSpec();
             spec.setNumber(newSpec.getNumber() != null ? newSpec.getNumber() : oldSpec.getNumber());
             spec.setTitle(newSpec.getTitle() != null ? newSpec.getTitle() : oldSpec.getTitle());
@@ -163,6 +167,36 @@ public class SmallThingService {
             merged.setSpec(spec);
         }
         return merged;
+    }
+
+    /**
+     * 清单文案不可修改（编号 / 标题 / 分类）。
+     *
+     * <p>「100 件小事」的内容是内置清单：控制台只允许记录进度（状态、日期、心情、一句话），
+     * 不允许改文案。这条约束**必须落在服务层**——只在界面上隐藏输入框的话，任何人用
+     * curl 打一次 PUT 就能改掉全站展示内容。
+     *
+     * <p>字段为 null 表示「本次不修改」，不算违规；只有传了不同的值才拒绝，
+     * 并且明确报 400 而不是静默忽略（静默忽略会让人以为改成功了）。
+     *
+     * @param oldSpec 库里的原值
+     * @param newSpec 请求体
+     */
+    private void assertContentUnchanged(SmallThing.SmallThingSpec oldSpec,
+        SmallThing.SmallThingSpec newSpec) {
+        if (oldSpec == null) {
+            return;
+        }
+        rejectIfChanged("编号", oldSpec.getNumber(), newSpec.getNumber());
+        rejectIfChanged("标题", oldSpec.getTitle(), newSpec.getTitle());
+        rejectIfChanged("分类", oldSpec.getCategory(), newSpec.getCategory());
+    }
+
+    private void rejectIfChanged(String field, Object original, Object incoming) {
+        if (incoming != null && !Objects.equals(original, incoming)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "小事文案不可修改：" + field);
+        }
     }
 
     /**
@@ -210,6 +244,29 @@ public class SmallThingService {
      * @return 按分类分组后的结果
      */
     public List<CategoryGroup> groupByCategory(List<SmallThing> things) {
+        return groupByCategory(things, true);
+    }
+
+    /**
+     * 按配置决定是否分组。
+     *
+     * <p>平铺模式下返回**唯一一个** {@code category} 为 null 的分组，而不是让模板去
+     * 走两条不同的渲染分支：卡片标记只写一份，避免「分组视图改了、平铺视图还是旧的」
+     * 这类两处漂移。
+     *
+     * @param things 小事列表
+     * @param byCategory true 按分类分组；false 平铺
+     * @return 分组结果
+     */
+    public List<CategoryGroup> groupByCategory(List<SmallThing> things, boolean byCategory) {
+        if (!byCategory) {
+            List<SmallThing> sorted = things == null ? List.of() : things.stream()
+                .sorted(Comparator.comparing(thing -> thing.getSpec() == null
+                    || thing.getSpec().getNumber() == null
+                    ? Integer.MAX_VALUE : thing.getSpec().getNumber()))
+                .toList();
+            return sorted.isEmpty() ? List.of() : List.of(new CategoryGroup(null, sorted));
+        }
         Map<String, List<SmallThing>> grouped = new LinkedHashMap<>();
         for (String category : defaultCategories()) {
             grouped.put(category, new ArrayList<>());
