@@ -3,10 +3,9 @@ package com.matrixgrowth.plugin100things;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.Metadata;
 import run.halo.app.extension.ReactiveExtensionClient;
@@ -14,8 +13,9 @@ import run.halo.app.extension.ReactiveExtensionClient;
 /**
  * 插件首次启用时写入 100 件小事预置数据。
  *
- * <p>只补齐缺失的条目，不覆盖用户已经改过的记录：先查出现有条目的编号集合，只创建差集。
- * 因此插件停用再启用、或用户清空后重新启用，都不会丢数据、也不会重复创建。
+ * <p><b>只在一条都没有时写入</b>，而不是「补齐缺失的编号」。控制台现在可以删除条目，
+ * 按老的「补差集」做法，用户删掉的条目会在插件下次启用时原样回来——他删了三次、
+ * 回来了三次，且日志里看不出任何异常。
  *
  * <p>由插件主类的 {@code start()} 调用——放在这里而不是事件监听器上，是因为
  * {@code PluginStartedEvent} 在插件 Spring 容器就绪后触发，那时 Scheme 可能尚未注册完成。
@@ -30,7 +30,7 @@ public class SmallThingInitializer {
     private final ReactiveExtensionClient client;
 
     /**
-     * 写入预置数据（幂等）。
+     * 写入预置数据（幂等：只要有任意一条存在就整体跳过）。
      */
     public void seed() {
         List<SmallThingSeed> seeds = SmallThingSeed.load();
@@ -40,20 +40,14 @@ public class SmallThingInitializer {
         client.list(SmallThing.class, thing -> true,
                 Comparator.comparing(SmallThingInitializer::numberOf,
                     Comparator.nullsLast(Comparator.naturalOrder())))
-            .map(SmallThingInitializer::numberOf)
-            .collect(Collectors.toSet())
-            .flatMap(existing -> {
-                for (SmallThingSeed seed : missing(seeds, existing)) {
-                    client.create(toExtension(seed)).subscribe(
-                        created -> {
-                            // 单条失败不影响其余条目
-                        },
-                        error -> {
-                            // 单条失败不影响其余条目
-                        });
-                }
-                return Mono.empty();
-            })
+            .count()
+            .flatMapMany(existing -> existing > 0
+                ? Flux.empty()
+                : Flux.fromIterable(seeds))
+            // 单条失败不影响其余条目：一条数据写不进去，不该让整个插件启动失败
+            .flatMap(seed -> client.create(toExtension(seed))
+                .onErrorResume(error -> Mono.empty()))
+            .then()
             .block();
     }
 
@@ -111,18 +105,5 @@ public class SmallThingInitializer {
         } catch (IllegalArgumentException e) {
             return null;
         }
-    }
-
-    /**
-     * 计算缺失的编号集合。
-     *
-     * @param seeds 预置条目
-     * @param existingNumbers 已存在的编号
-     * @return 需要创建的条目
-     */
-    static List<SmallThingSeed> missing(List<SmallThingSeed> seeds, Set<Integer> existingNumbers) {
-        return seeds.stream()
-            .filter(seed -> seed.getNumber() != null && !existingNumbers.contains(seed.getNumber()))
-            .collect(Collectors.toList());
     }
 }

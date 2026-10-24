@@ -32,11 +32,11 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: |
       ["plugin:plugin-100-things:smallthing:manage"]
 rules:
-  # 清单文案不可编辑：这里刻意没有 create / delete；
-  # update 也只到进度字段（接口会拒绝改动标题、分类、编号的请求）。
+  # 控制台是唯一的编辑入口：清单可以增删改（含文案），章节与页面文案存在 settings 里。
+  # 前台展示页对访客只读，没有对应的写接口。
   - apiGroups: ["hundredthings.plugin.halo.run"]
     resources: ["smallthings"]
-    verbs: ["get", "list", "update", "patch"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
   - apiGroups: ["console.api.hundredthings.plugin.halo.run"]
     resources: ["smallthings", "smallthings/stats", "smallthings/options", "settings"]
-    verbs: ["get", "list", "update", "patch"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]

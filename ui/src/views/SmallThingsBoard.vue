@@ -1,26 +1,54 @@
 <script setup lang="ts">
+/**
+ * 小事清单 / 生活章节。
+ *
+ * - 清单：新增、编辑（编号 / 名字 / 分类 / 状态 / 日期 / 心情 / 一句话）、删除。
+ * - 章节：增删改章节名、寄语与解锁阈值，存进 ConfigMap，前台进度条立刻跟着变。
+ *
+ * 前台展示页对访客只读；编辑只发生在这里（控制台），并由后端校验兜底。
+ */
 import { computed, onMounted, ref } from 'vue'
 import {
-  CHAPTERS,
   CATEGORIES,
   MOOD_TEXT,
   STATUS_TEXT,
-  fetchStats,
+  createSmallThing,
+  deleteSmallThing,
+  fetchSettings,
   listSmallThings,
+  saveSettings,
   updateSmallThing,
+  type Chapter,
   type SmallThing,
   type SmallThingMood,
+  type SmallThingSettings,
   type SmallThingStatus,
 } from '@/api/smallThings'
 
 const things = ref<SmallThing[]>([])
+const settings = ref<SmallThingSettings | null>(null)
+const defaults = ref<SmallThingSettings | null>(null)
 const loading = ref(true)
 const errorMessage = ref('')
+const notice = ref('')
 const keyword = ref('')
 const categoryFilter = ref('')
+/** 编辑中的草稿；新增时 editingOriginal 为 null。 */
 const editing = ref<SmallThing | null>(null)
 const editingOriginal = ref<SmallThing | null>(null)
 const saving = ref(false)
+const deleting = ref(false)
+const confirmDelete = ref(false)
+const modalError = ref('')
+
+/** 章节草稿（与 settings.chapters 分开，未保存时不影响已生效配置）。 */
+const chapterDraft = ref<Chapter[]>([])
+const chapterSaving = ref(false)
+const chapterError = ref('')
+const chapterNotice = ref('')
+
+/** 是否为新增。 */
+const isCreating = computed(() => editingOriginal.value === null)
 
 /**
  * 当前视图（由外层页签控制）。
@@ -36,20 +64,49 @@ const treasuredCount = computed(
     things.value.filter((t) => t.spec.status === 'TREASURED').length
 )
 
-/** 当前章节（按已珍藏件数取阈值不超过的最大章节）。 */
-const currentChapter = computed(() => {
-  let current = CHAPTERS[0]!
-  for (const chapter of CHAPTERS) {
-    if (treasuredCount.value >= chapter.min) {
-      current = chapter
+/** 章节（按阈值升序，与后端排序规则一致）。 */
+const chapters = computed<Chapter[]>(() =>
+  [...(settings.value?.chapters ?? [])].sort((a, b) => a.min - b.min)
+)
+
+/**
+ * 分类候选：内置十类 + 数据里出现过的自定义分类。
+ *
+ * 只给内置十类的话，编辑一条自定义分类的条目时下拉框会显示成空，
+ * 用户一保存就把分类改成了别的（静默改数据）。
+ */
+const categoryOptions = computed(() => {
+  const set = new Set<string>(CATEGORIES)
+  for (const thing of things.value) {
+    if (thing.spec.category) {
+      set.add(thing.spec.category)
     }
   }
-  return current
+  const current = editing.value?.spec.category
+  if (current) {
+    set.add(current)
+  }
+  return Array.from(set)
+})
+
+/** 当前章节（按已珍藏件数取阈值不超过的最大章节）。 */
+const currentChapter = computed(() => {
+  const list = chapters.value
+  if (!list.length) {
+    return { name: '尚未设置章节', say: '', min: 0, lv: 1 }
+  }
+  let index = 0
+  list.forEach((chapter, i) => {
+    if (treasuredCount.value >= chapter.min) {
+      index = i
+    }
+  })
+  return { ...list[index]!, lv: index + 1 }
 })
 
 /** 下一个尚未达成的章节。 */
 const nextChapter = computed(() =>
-  CHAPTERS.find((c) => treasuredCount.value < c.min)
+  chapters.value.find((c) => treasuredCount.value < c.min)
 )
 
 /** 距下一章还差多少件。 */
@@ -169,7 +226,7 @@ const letter = computed(() => {
   if (n === 0) {
     text = '这 100 件小事还没有被划掉任何一件。别急，第一件小事往往最难开始。挑一个今天就能做的，把它写下来。'
   } else if (nextChapter.value) {
-    text = `你已经认真完成了 ${n} 件小事。它们散落在不同的日子里，可能你自己都记不清了。再攒 ${remaining.value} 件，你就走到「${nextChapter.value.name.split(' · ')[1]}」了。日子不急，小事也不急，慢慢来。`
+    text = `你已经认真完成了 ${n} 件小事。它们散落在不同的日子里，可能你自己都记不清了。再攒 ${remaining.value} 件，你就走到「${nextChapter.value.name}」了。日子不急，小事也不急，慢慢来。`
   } else {
     text = '100 件小事，全部被一一收藏。你走完了这张清单，也走完了一段人生。别回头看，看前面就好。'
   }
@@ -180,12 +237,17 @@ const letter = computed(() => {
   return text
 })
 
-/** 加载数据。 */
+/** 加载数据（清单 + 配置里的章节）。 */
 async function load() {
   loading.value = true
   errorMessage.value = ''
   try {
-    things.value = await listSmallThings()
+    // 两个请求一起发：章节列表和清单没有先后依赖，串行会让首屏多等一个来回
+    const [items, response] = await Promise.all([listSmallThings(), fetchSettings()])
+    things.value = items
+    settings.value = response.config
+    defaults.value = response.defaults
+    chapterDraft.value = structuredClone(response.config.chapters)
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -200,45 +262,180 @@ function openEditor(thing: SmallThing) {
   // 界面还会显示「已保存」（真实缺陷，不是理论风险）。
   editingOriginal.value = thing
   editing.value = structuredClone(thing)
+  confirmDelete.value = false
+  modalError.value = ''
+}
+
+/** 打开新增面板（编号默认取现有最大编号 + 1）。 */
+function openCreator() {
+  const maxNumber = things.value.reduce((max, t) => Math.max(max, t.spec.number), 0)
+  editingOriginal.value = null
+  editing.value = {
+    apiVersion: '',
+    kind: '',
+    metadata: { name: '' },
+    spec: {
+      number: Math.min(999, maxNumber + 1),
+      title: '',
+      category: CATEGORIES[0]!,
+      status: 'TODO',
+    },
+    status: { stage: 'TRACKED', observedTime: '' },
+  }
+  confirmDelete.value = false
+  modalError.value = ''
 }
 
 /** 关闭记录面板。 */
 function closeEditor() {
   editing.value = null
   editingOriginal.value = null
+  confirmDelete.value = false
+  modalError.value = ''
 }
 
-/** 保存记录（增量更新：只提交变更字段）。 */
+/** 保存（新增走 POST，编辑走增量 PUT）。 */
 async function saveEditor() {
   const draft = editing.value
+  if (!draft || saving.value) {
+    return
+  }
   const original = editingOriginal.value
-  if (!draft || !original || saving.value) {
+  const number = Number(draft.spec.number)
+  // 前端先挡一遍，避免为了看一条错误提示跑一趟网络往返；后端仍然会校验
+  if (!draft.spec.title.trim()) {
+    modalError.value = '请填写这件小事的名字'
+    return
+  }
+  if (!draft.spec.category) {
+    modalError.value = '请选择分类（空分类的条目不会出现在前台）'
+    return
+  }
+  if (!Number.isInteger(number) || number < 1 || number > 999) {
+    modalError.value = '编号必须是 1-999 之间的整数'
     return
   }
   saving.value = true
+  modalError.value = ''
   try {
-    const spec: Partial<SmallThing['spec']> = {}
-    if (draft.spec.status !== original.spec.status) {
-      spec.status = draft.spec.status
-    }
-    if ((draft.spec.doneAt || '') !== (original.spec.doneAt || '')) {
-      spec.doneAt = draft.spec.doneAt
-    }
-    if ((draft.spec.mood || '') !== (original.spec.mood || '')) {
-      spec.mood = draft.spec.mood
-    }
-    if ((draft.spec.note || '') !== (original.spec.note || '')) {
-      spec.note = draft.spec.note
-    }
-    if (Object.keys(spec).length) {
-      await updateSmallThing(draft.metadata.name, spec)
+    if (!original) {
+      await createSmallThing({
+        number,
+        title: draft.spec.title.trim(),
+        category: draft.spec.category,
+        status: draft.spec.status,
+        mood: draft.spec.mood,
+        doneAt: draft.spec.doneAt || undefined,
+        note: draft.spec.note || undefined,
+      })
+      notice.value = `已新增 № ${pad3(number)}`
+    } else {
+      const spec: Partial<SmallThing['spec']> = {}
+      if (number !== original.spec.number) {
+        spec.number = number
+      }
+      if (draft.spec.title.trim() !== original.spec.title) {
+        spec.title = draft.spec.title.trim()
+      }
+      if (draft.spec.category !== original.spec.category) {
+        spec.category = draft.spec.category
+      }
+      if (draft.spec.status !== original.spec.status) {
+        spec.status = draft.spec.status
+      }
+      if ((draft.spec.doneAt || '') !== (original.spec.doneAt || '')) {
+        spec.doneAt = draft.spec.doneAt
+      }
+      if ((draft.spec.mood || '') !== (original.spec.mood || '')) {
+        spec.mood = draft.spec.mood
+      }
+      if ((draft.spec.note || '') !== (original.spec.note || '')) {
+        spec.note = draft.spec.note
+      }
+      if (Object.keys(spec).length) {
+        await updateSmallThing(draft.metadata.name, spec)
+        notice.value = '已保存，前台刷新后生效'
+      }
     }
     await load()
     closeEditor()
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : String(e)
+    // 错误显示在面板里：抛到页面顶部时，弹层把提示挡住了，用户只能看到「什么都没发生」
+    modalError.value = e instanceof Error ? e.message : String(e)
   } finally {
     saving.value = false
+  }
+}
+
+/** 删除（需要点两次：第一下变成「确认删除」，避免误触）。 */
+async function removeThing() {
+  const draft = editing.value
+  if (!draft || !editingOriginal.value || deleting.value) {
+    return
+  }
+  if (!confirmDelete.value) {
+    confirmDelete.value = true
+    return
+  }
+  deleting.value = true
+  modalError.value = ''
+  try {
+    await deleteSmallThing(draft.metadata.name)
+    notice.value = `已删除 № ${pad3(draft.spec.number)}`
+    await load()
+    closeEditor()
+  } catch (e) {
+    modalError.value = e instanceof Error ? e.message : String(e)
+    confirmDelete.value = false
+  } finally {
+    deleting.value = false
+  }
+}
+
+/** 新增一个章节（阈值默认排在最后一个之后）。 */
+function addChapter() {
+  const maxMin = chapterDraft.value.reduce((max, c) => Math.max(max, c.min), 0)
+  chapterDraft.value.push({ name: '', say: '', min: Math.min(999, maxMin + 10) })
+  chapterNotice.value = ''
+}
+
+/** 删除一个章节。 */
+function removeChapter(index: number) {
+  chapterDraft.value.splice(index, 1)
+  chapterNotice.value = ''
+}
+
+/** 章节填回默认值（仍需点保存才落库）。 */
+function resetChapters() {
+  if (!defaults.value) {
+    return
+  }
+  chapterDraft.value = structuredClone(defaults.value.chapters)
+  chapterNotice.value = '已填回默认章节，点「保存章节」后生效'
+}
+
+/** 保存章节（连同当前页面配置一起写回 ConfigMap）。 */
+async function saveChapters() {
+  if (!settings.value || chapterSaving.value) {
+    return
+  }
+  chapterSaving.value = true
+  chapterError.value = ''
+  chapterNotice.value = ''
+  try {
+    const response = await saveSettings({
+      ...settings.value,
+      chapters: chapterDraft.value,
+    })
+    // 以服务端规范化后的结果为准：它会去重阈值、给空名字补默认名
+    settings.value = response.config
+    defaults.value = response.defaults
+    chapterDraft.value = structuredClone(response.config.chapters)
+    chapterNotice.value = '章节已保存，前台刷新即可看到'
+  } catch (e) {
+    chapterError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    chapterSaving.value = false
   }
 }
 
@@ -295,7 +492,7 @@ onMounted(load)
         <div class="th-sub">一百件小事 · 一生的清单</div>
         <div class="th-quote">有些事情不是为了完成，而是为了记住。</div>
         <div class="th-lock">
-          清单文案是内置内容，任何人都不能修改；点开卡片只记录进度、日期、心情与一句话。
+          前台访客只读；这里的增删改会立即反映到前台页面。
         </div>
       </div>
 
@@ -311,7 +508,10 @@ onMounted(load)
           <option v-for="cat in CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
         </select>
         <span class="th-count">显示 {{ filtered.length }} / {{ things.length }} 件</span>
+        <button type="button" class="th-btn primary" @click="openCreator">＋ 新增小事</button>
       </div>
+
+      <div v-if="notice" class="th-notice">{{ notice }}</div>
 
       <div v-if="!filteredGroups.length" class="th-state">
         还没有匹配的小事，换个关键词试试。
@@ -364,15 +564,67 @@ onMounted(load)
         </div>
         <div class="th-road-nodes">
           <div
-            v-for="chapter in CHAPTERS"
-            :key="chapter.lv"
+            v-for="(chapter, index) in chapters"
+            :key="`${index}-${chapter.min}`"
             class="th-road-node"
             :class="{ on: treasuredCount >= chapter.min }"
           >
             <div class="th-rn-dot" />
-            <div class="th-rn-name">{{ chapter.name.split(' · ')[1] }}</div>
+            <div class="th-rn-name">{{ chapter.name }}</div>
             <div class="th-rn-min">{{ chapter.min }} 件</div>
           </div>
+        </div>
+      </div>
+
+      <div class="th-sec-title">章节设置</div>
+      <div class="th-ch-edit">
+        <p class="th-ch-hint">
+          章节名与「攒到多少件才解锁」都在这里改。阈值重复时只会保留靠前的一章（后面那章永远解锁不了）。
+        </p>
+        <div v-if="chapterError" class="th-modal-error">{{ chapterError }}</div>
+        <div v-for="(chapter, index) in chapterDraft" :key="index" class="th-ch-row">
+          <span class="th-ch-lv">Lv.{{ index + 1 }}</span>
+          <input
+            v-model="chapter.name"
+            class="th-input th-ch-name"
+            type="text"
+            maxlength="32"
+            placeholder="章节名，如 启程"
+          />
+          <input
+            v-model="chapter.say"
+            class="th-input th-ch-say"
+            type="text"
+            maxlength="120"
+            placeholder="这一章的一句话"
+          />
+          <label class="th-ch-min">
+            <input
+              v-model.number="chapter.min"
+              class="th-input"
+              type="number"
+              min="0"
+              max="999"
+            />
+            <span>件解锁</span>
+          </label>
+          <button type="button" class="th-ch-del" @click="removeChapter(index)">删除</button>
+        </div>
+        <div v-if="!chapterDraft.length" class="th-muted">
+          还没有章节。至少留一章，否则前台的进度条会空着。
+        </div>
+        <div class="th-ch-foot">
+          <span v-if="chapterNotice" class="th-ch-notice">{{ chapterNotice }}</span>
+          <button type="button" class="th-btn" @click="addChapter">＋ 新增章节</button>
+          <button type="button" class="th-btn" @click="resetChapters">恢复默认章节</button>
+          <button
+            type="button"
+            class="th-btn primary"
+            :disabled="chapterSaving"
+            @click="saveChapters"
+          >
+            {{ chapterSaving ? '保存中…' : '保存章节' }}
+          </button>
         </div>
       </div>
 
@@ -434,13 +686,43 @@ onMounted(load)
         <div class="th-modal-head">
           <div>
             <div class="th-m-num">
-              № {{ pad3(editing.spec.number) }}　·　{{ editing.spec.category }}
+              {{ isCreating ? '新增一件小事' : `№ ${pad3(editing.spec.number)}　·　${editing.spec.category}` }}
             </div>
-            <h3 class="serif">{{ editing.spec.title }}</h3>
+            <h3 class="serif">{{ isCreating ? '想做的事，现在写下来' : editing.spec.title }}</h3>
           </div>
           <button class="th-close" @click="closeEditor">✕</button>
         </div>
         <div class="th-modal-body">
+          <div v-if="modalError" class="th-modal-error">{{ modalError }}</div>
+
+          <div class="th-field">
+            <label>编号</label>
+            <input
+              v-model.number="editing.spec.number"
+              class="th-input"
+              type="number"
+              min="1"
+              max="999"
+            />
+          </div>
+          <div class="th-field">
+            <label>这件小事</label>
+            <input
+              v-model="editing.spec.title"
+              class="th-input"
+              type="text"
+              maxlength="100"
+              placeholder="如：和十七岁的自己聊一次天"
+            />
+          </div>
+          <div class="th-field">
+            <label>分类</label>
+            <select v-model="editing.spec.category" class="th-input">
+              <option value="" disabled>请选择分类</option>
+              <option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ cat }}</option>
+            </select>
+          </div>
+
           <div class="th-field">
             <label>状态</label>
             <div class="th-status-row">
@@ -482,9 +764,18 @@ onMounted(load)
           </div>
         </div>
         <div class="th-modal-foot">
+          <button
+            v-if="!isCreating"
+            class="th-btn danger"
+            :class="{ armed: confirmDelete }"
+            :disabled="deleting"
+            @click="removeThing"
+          >
+            {{ deleting ? '删除中…' : confirmDelete ? '确认删除？' : '删除' }}
+          </button>
           <button class="th-btn" @click="closeEditor">取消</button>
           <button class="th-btn primary" :disabled="saving" @click="saveEditor">
-            {{ saving ? '保存中…' : '保存记录' }}
+            {{ saving ? '保存中…' : isCreating ? '新增' : '保存记录' }}
           </button>
         </div>
       </div>
@@ -652,6 +943,7 @@ onMounted(load)
   color: var(--ink-soft);
 }
 .th-count {
+  margin-left: auto;
   font-size: 12px;
   color: var(--ink-faint);
 }
@@ -1202,6 +1494,117 @@ onMounted(load)
 .th-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ---------- 提示条 ---------- */
+.th-notice {
+  margin: -8px 0 16px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--accent-wash);
+  border: 1px solid #e6d3b3;
+  color: var(--accent-deep);
+  font-size: 12.5px;
+}
+
+/* ---------- 删除按钮（两段式确认） ---------- */
+.th-btn.danger {
+  margin-right: auto;
+  color: #9c4a4a;
+  border-color: #e3b9b9;
+  background: #fff7f7;
+}
+.th-btn.danger.armed {
+  background: #b4544f;
+  border-color: #9c4a4a;
+  color: #fff;
+}
+
+.th-modal-error {
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: #fdeeee;
+  border: 1px solid #f3d2d2;
+  color: #9c4a4a;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* ---------- 章节设置 ---------- */
+.th-ch-edit {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px 18px;
+}
+.th-ch-hint {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  line-height: 1.7;
+}
+.th-ch-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 9px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.th-ch-lv {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--accent-deep);
+  background: var(--accent-wash);
+  border: 1px solid #e6d3b3;
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+.th-ch-name {
+  flex: 0 0 150px;
+  width: auto;
+}
+.th-ch-say {
+  flex: 1 1 220px;
+  width: auto;
+}
+.th-ch-min {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.th-ch-min .th-input {
+  width: 84px;
+  padding: 7px 9px;
+}
+.th-ch-del {
+  border: none;
+  background: none;
+  color: #9c4a4a;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.th-ch-del:hover {
+  text-decoration: underline;
+}
+.th-ch-foot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding-top: 13px;
+  border-top: 1px dashed var(--line);
+}
+.th-ch-notice {
+  margin-right: auto;
+  font-size: 12.5px;
+  color: var(--accent-deep);
 }
 
 @media (max-width: 640px) {

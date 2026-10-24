@@ -112,7 +112,12 @@ class SmallThingServiceTest {
         when(client.get(eq(SmallThing.class), eq("missing"))).thenReturn(Mono.empty());
 
         StepVerifier.create(service.delete("missing"))
-            .expectError(IllegalArgumentException.class)
+            .expectErrorSatisfies(error -> {
+                assertThat(error).isInstanceOf(ResponseStatusException.class);
+                // 404 而不是 500：删除一个不存在的条目是「目标不在」，不是服务端故障
+                assertThat(((ResponseStatusException) error).getStatusCode().value())
+                    .isEqualTo(404);
+            })
             .verify();
     }
 
@@ -127,7 +132,11 @@ class SmallThingServiceTest {
         patch.setSpec(new SmallThing.SmallThingSpec());
 
         StepVerifier.create(service.update(patch))
-            .expectError(IllegalArgumentException.class)
+            .expectErrorSatisfies(error -> {
+                assertThat(error).isInstanceOf(ResponseStatusException.class);
+                assertThat(((ResponseStatusException) error).getStatusCode().value())
+                    .isEqualTo(404);
+            })
             .verify();
     }
 
@@ -266,6 +275,11 @@ class SmallThingServiceTest {
     void createShouldSetStatusBeforePersisting() {
         SmallThing thing = existingThing();
         thing.getMetadata().setName(null);
+        // 编号唯一性检查会先列一遍现有记录，这里让它返回空
+        when(client.list(eq(SmallThing.class), any(), any()))
+            .thenReturn(reactor.core.publisher.Flux.empty());
+        when(client.fetch(eq(SmallThing.class), eq("smallthing-001")))
+            .thenReturn(Mono.empty());
         when(client.create(any(SmallThing.class)))
             .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
@@ -274,8 +288,118 @@ class SmallThingServiceTest {
                 assertThat(created.getStatus()).isNotNull();
                 assertThat(created.getStatus().getPhase()).isEqualTo("TREASURED");
                 assertThat(created.getStatus().getStage()).isEqualTo("TRACKED");
+                // 名称统一由后端按编号生成，和预置数据同名规则一致
+                assertThat(created.getMetadata().getName()).isEqualTo("smallthing-001");
             })
             .verifyComplete();
+    }
+
+    @Test
+    void createShouldRejectDuplicateNumber() {
+        when(client.list(eq(SmallThing.class), any(), any()))
+            .thenReturn(reactor.core.publisher.Flux.just(existingThing()));
+
+        SmallThing thing = new SmallThing();
+        Metadata metadata = new Metadata();
+        thing.setMetadata(metadata);
+        SmallThing.SmallThingSpec spec = new SmallThing.SmallThingSpec();
+        spec.setNumber(1);
+        spec.setTitle("重复编号的小事");
+        spec.setCategory("青春时光");
+        thing.setSpec(spec);
+
+        StepVerifier.create(service.create(thing))
+            .expectErrorSatisfies(error -> {
+                assertThat(error).isInstanceOf(ResponseStatusException.class);
+                assertThat(((ResponseStatusException) error).getStatusCode().value())
+                    .isEqualTo(400);
+            })
+            .verify();
+
+        // 冲突时不能写库，否则会多出一条同名记录
+        verify(client, never()).create(any());
+    }
+
+    @Test
+    void createShouldRequireTitleAndCategory() {
+        SmallThing thing = new SmallThing();
+        thing.setMetadata(new Metadata());
+        SmallThing.SmallThingSpec spec = new SmallThing.SmallThingSpec();
+        spec.setNumber(5);
+        spec.setTitle("   ");
+        spec.setCategory("青春时光");
+        thing.setSpec(spec);
+
+        StepVerifier.create(service.create(thing))
+            .expectErrorSatisfies(error -> assertThat(error)
+                .isInstanceOf(ResponseStatusException.class))
+            .verify();
+
+        // 空分类的条目会被前台的 groupByCategory 丢弃——必须在这里挡住
+        spec.setTitle("看一次海");
+        spec.setCategory("");
+        StepVerifier.create(service.create(thing))
+            .expectErrorSatisfies(error -> assertThat(((ResponseStatusException) error)
+                .getStatusCode().value()).isEqualTo(400))
+            .verify();
+
+        verify(client, never()).create(any());
+    }
+
+    @Test
+    void updateShouldAllowEditingContent() {
+        // 控制台是唯一的编辑入口：改标题、分类、编号都必须能存下去
+        when(client.get(eq(SmallThing.class), eq("thing-001")))
+            .thenReturn(Mono.just(existingThing()));
+        when(client.list(eq(SmallThing.class), any(), any()))
+            .thenReturn(reactor.core.publisher.Flux.empty());
+        when(client.update(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        SmallThing patch = new SmallThing();
+        Metadata metadata = new Metadata();
+        metadata.setName("thing-001");
+        patch.setMetadata(metadata);
+        SmallThing.SmallThingSpec patchSpec = new SmallThing.SmallThingSpec();
+        patchSpec.setNumber(42);
+        patchSpec.setTitle("  改过的标题  ");
+        patchSpec.setCategory("留下痕迹");
+        patch.setSpec(patchSpec);
+
+        StepVerifier.create(service.update(patch))
+            .assertNext(updated -> {
+                assertThat(updated.getSpec().getNumber()).isEqualTo(42);
+                // 首尾空白必须去掉：分类按字符串精确匹配，带空格会变成一个「新分类」
+                assertThat(updated.getSpec().getTitle()).isEqualTo("改过的标题");
+                assertThat(updated.getSpec().getCategory()).isEqualTo("留下痕迹");
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void updateShouldRejectNumberTakenByAnotherThing() {
+        when(client.get(eq(SmallThing.class), eq("thing-001")))
+            .thenReturn(Mono.just(existingThing()));
+        SmallThing other = existingThing();
+        other.getMetadata().setName("thing-002");
+        other.getSpec().setNumber(7);
+        when(client.list(eq(SmallThing.class), any(), any()))
+            .thenReturn(reactor.core.publisher.Flux.just(other));
+
+        SmallThing patch = new SmallThing();
+        Metadata metadata = new Metadata();
+        metadata.setName("thing-001");
+        patch.setMetadata(metadata);
+        SmallThing.SmallThingSpec patchSpec = new SmallThing.SmallThingSpec();
+        patchSpec.setNumber(7);
+        patch.setSpec(patchSpec);
+
+        StepVerifier.create(service.update(patch))
+            .expectErrorSatisfies(error -> assertThat(((ResponseStatusException) error)
+                .getStatusCode().value()).isEqualTo(400))
+            .verify();
+
+        verify(client, never()).update(any());
     }
 
     @Test
@@ -321,51 +445,6 @@ class SmallThingServiceTest {
     }
 
     @Test
-    void updateShouldRejectContentChanges() {
-        when(client.get(eq(SmallThing.class), eq("thing-001")))
-            .thenReturn(Mono.just(existingThing()));
-
-        SmallThing patch = new SmallThing();
-        Metadata metadata = new Metadata();
-        metadata.setName("thing-001");
-        patch.setMetadata(metadata);
-        SmallThing.SmallThingSpec patchSpec = new SmallThing.SmallThingSpec();
-        patchSpec.setTitle("擅自改掉的标题");
-        patch.setSpec(patchSpec);
-
-        StepVerifier.create(service.update(patch))
-            .expectErrorSatisfies(error -> {
-                assertThat(error).isInstanceOf(ResponseStatusException.class);
-                assertThat(((ResponseStatusException) error).getStatusCode().value())
-                    .isEqualTo(400);
-            })
-            .verify();
-
-        // 关键：被拒绝时不能有任何写库动作，否则就是「报了错但还是改了」
-        verify(client, never()).update(any());
-    }
-
-    @Test
-    void updateShouldRejectCategoryChange() {
-        when(client.get(eq(SmallThing.class), eq("thing-001")))
-            .thenReturn(Mono.just(existingThing()));
-
-        SmallThing patch = new SmallThing();
-        Metadata metadata = new Metadata();
-        metadata.setName("thing-001");
-        patch.setMetadata(metadata);
-        SmallThing.SmallThingSpec patchSpec = new SmallThing.SmallThingSpec();
-        patchSpec.setCategory("换个分类");
-        patch.setSpec(patchSpec);
-
-        StepVerifier.create(service.update(patch))
-            .expectError(ResponseStatusException.class)
-            .verify();
-
-        verify(client, never()).update(any());
-    }
-
-    @Test
     void updateShouldAllowUnchangedContentBeingResent() {
         // 控制台回传的是整份对象，内容没变时必须放行，否则连打卡都存不了
         when(client.get(eq(SmallThing.class), eq("thing-001")))
@@ -385,6 +464,52 @@ class SmallThingServiceTest {
         patch.setSpec(patchSpec);
 
         StepVerifier.create(service.update(patch)).expectNextCount(1).verifyComplete();
+    }
+
+    @Test
+    void deleteShouldRejectAlreadyDeletingThing() {
+        // 真实环境实测：连删两次都返回 200。第二次删的是「正在删」的那条，
+        // 对用户来说却是「删除成功但还在列表里」。
+        SmallThing existed = existingThing();
+        existed.getMetadata().setDeletionTimestamp(Instant.now());
+        when(client.get(eq(SmallThing.class), eq("thing-001"))).thenReturn(Mono.just(existed));
+
+        StepVerifier.create(service.delete("thing-001"))
+            .expectErrorSatisfies(error -> assertThat(((ResponseStatusException) error)
+                .getStatusCode().value()).isEqualTo(404))
+            .verify();
+
+        verify(client, never()).delete(any());
+    }
+
+    @Test
+    void createShouldRejectNumberWhileOldRecordIsStillTerminating() {
+        when(client.list(eq(SmallThing.class), any(), any()))
+            .thenReturn(reactor.core.publisher.Flux.empty());
+        SmallThing terminating = existingThing();
+        terminating.getMetadata().setName("smallthing-009");
+        terminating.getMetadata().setDeletionTimestamp(Instant.now());
+        when(client.fetch(eq(SmallThing.class), eq("smallthing-009")))
+            .thenReturn(Mono.just(terminating));
+
+        SmallThing thing = new SmallThing();
+        thing.setMetadata(new Metadata());
+        SmallThing.SmallThingSpec spec = new SmallThing.SmallThingSpec();
+        spec.setNumber(9);
+        spec.setTitle("刚删掉的编号");
+        spec.setCategory("青春时光");
+        thing.setSpec(spec);
+
+        StepVerifier.create(service.create(thing))
+            .expectErrorSatisfies(error -> {
+                assertThat(((ResponseStatusException) error).getStatusCode().value())
+                    .isEqualTo(400);
+                assertThat(((ResponseStatusException) error).getReason())
+                    .contains("正在删除");
+            })
+            .verify();
+
+        verify(client, never()).create(any());
     }
 
     @Test

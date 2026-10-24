@@ -7,7 +7,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
-import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,24 +55,30 @@ class SmallThingInitializerTest {
     }
 
     @Test
-    void missingShouldOnlyReturnAbsentNumbers() {
-        List<SmallThingSeed> seeds = SmallThingSeed.load();
-        Set<Integer> existing = Set.of(1, 2, 3);
+    void seedShouldWriteAllItemsWhenLibraryIsEmpty() {
+        when(client.list(any(), any(), any())).thenReturn(Flux.empty());
+        when(client.create(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-        List<SmallThingSeed> missing = SmallThingInitializer.missing(seeds, existing);
+        initializer.seed();
 
-        assertThat(missing).hasSize(97);
-        assertThat(missing).extracting(SmallThingSeed::getNumber).doesNotContain(1, 2, 3);
+        verify(client, org.mockito.Mockito.times(100)).create(any(SmallThing.class));
     }
 
     @Test
-    void missingShouldReturnEmptyWhenAllExist() {
-        List<SmallThingSeed> seeds = SmallThingSeed.load();
-        Set<Integer> all = seeds.stream()
-            .map(SmallThingSeed::getNumber)
-            .collect(java.util.stream.Collectors.toSet());
+    void seedShouldNotTouchAnythingWhenRecordsExist() {
+        // 关键行为变化：以前是「补齐缺失编号」，那样用户删掉的条目会在插件重启后自己回来。
+        // 只要还有任意一条记录存在，就整体跳过预置。
+        SmallThing existed = new SmallThing();
+        SmallThing.SmallThingSpec spec = new SmallThing.SmallThingSpec();
+        spec.setNumber(1);
+        existed.setSpec(spec);
 
-        assertThat(SmallThingInitializer.missing(seeds, all)).isEmpty();
+        when(client.list(any(), any(), any())).thenReturn(Flux.just(existed));
+
+        initializer.seed();
+
+        verify(client, never()).create(any(SmallThing.class));
     }
 
     @Test
@@ -114,24 +119,6 @@ class SmallThingInitializerTest {
 
         assertThat(thing.getSpec().getStatus()).isEqualTo(SmallThing.SmallThingSpec.Status.TODO);
         assertThat(thing.getSpec().getMood()).isNull();
-    }
-
-    @Test
-    void seedShouldCreateOnlyMissingItems() {
-        // 已存在编号 1、2
-        SmallThing existed = new SmallThing();
-        SmallThing.SmallThingSpec spec = new SmallThing.SmallThingSpec();
-        spec.setNumber(1);
-        existed.setSpec(spec);
-
-        when(client.list(any(), any(), any())).thenReturn(Flux.just(existed));
-        when(client.create(any(SmallThing.class)))
-            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-
-        initializer.seed();
-
-        // 应创建 99 条（100 减去已存在的 1 条）
-        verify(client, org.mockito.Mockito.times(99)).create(any(SmallThing.class));
     }
 
     @Test

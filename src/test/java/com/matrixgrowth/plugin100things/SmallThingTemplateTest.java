@@ -76,4 +76,13 @@ class SmallThingTemplateTest {
         assertThat(template).contains("${settings.pageSubtitle}");
         assertThat(template).contains("${treasuredCount}");
     }
+
+    @Test
+    void templateMustTakeChapterNameFromModel() {
+        // 章节是控制台可改的：模板里写死章节名，后台改完前台不会变，也不报错
+        assertThat(template).contains("${chapter.name}");
+        assertThat(template).contains("${nextChapter.name}");
+        assertThat(template).doesNotContain("启程");
+        assertThat(template).doesNotContain("满载而归");
+    }
 }

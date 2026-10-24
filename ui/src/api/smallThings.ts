@@ -75,15 +75,15 @@ export const MOOD_TEXT: Record<SmallThingMood, string> = {
   OTHER: '其他',
 }
 
-/** 六个生活章节，阈值对应已珍藏 0 / 20 / 40 / 60 / 80 / 100 件。 */
-export const CHAPTERS = [
-  { lv: 1, name: '第一章 · 启程', say: '你刚刚把这张清单铺开。', min: 0 },
-  { lv: 2, name: '第二章 · 相遇', say: '你开始遇见喜欢的人和事。', min: 20 },
-  { lv: 3, name: '第三章 · 生长', say: '你正在长成更完整的自己。', min: 40 },
-  { lv: 4, name: '第四章 · 远行', say: '你走出了熟悉的生活半径。', min: 60 },
-  { lv: 5, name: '第五章 · 珍藏', say: '你的人生已经攒下许多故事。', min: 80 },
-  { lv: 6, name: '终章 · 满载而归', say: '这一段人生，值得被好好记住。', min: 100 },
-]
+/** 六个生活章节的默认定义（实际值以后端返回的 config.chapters 为准）。 */
+export interface Chapter {
+  /** 章节短名，如「启程」。 */
+  name: string
+  /** 章节寄语。 */
+  say: string
+  /** 解锁该章所需的已珍藏件数。 */
+  min: number
+}
 
 /** 十个默认分类。 */
 export const CATEGORIES = [
@@ -126,6 +126,28 @@ export function listSmallThings(): Promise<SmallThing[]> {
   return consoleApi<SmallThing[]>('/smallthings')
 }
 
+/**
+ * 新增一条小事。
+ *
+ * metadata.name 由后端按编号生成并回传，这里不用（也不该）自己拼。
+ */
+export function createSmallThing(
+  spec: Pick<SmallThing['spec'], 'number' | 'title' | 'category'> &
+    Partial<SmallThing['spec']>
+): Promise<SmallThing> {
+  return consoleApi<SmallThing>('/smallthings', {
+    method: 'post',
+    data: { spec },
+  })
+}
+
+/** 删除一条小事。 */
+export function deleteSmallThing(name: string): Promise<SmallThing> {
+  return consoleApi<SmallThing>(`/smallthings/${name}`, {
+    method: 'delete',
+  })
+}
+
 /** 更新一条小事（增量更新：只传需要变更的字段）。 */
 export function updateSmallThing(
   name: string,
@@ -138,10 +160,9 @@ export function updateSmallThing(
 }
 
 /**
- * 展示配置。
+ * 展示配置 + 章节定义。
  *
- * 清单文案（编号 / 标题 / 分类）是内置内容，没有创建、删除入口，
- * 更新也只接受进度字段——所以这里没有任何「新增小事」的 API。
+ * 存在插件自己的 ConfigMap 里，保存后前台下一次请求即生效。
  */
 export interface SmallThingSettings {
   pageTitle: string
@@ -150,6 +171,8 @@ export interface SmallThingSettings {
   footerNote: string
   showProgress: boolean
   groupByCategory: boolean
+  /** 生活章节（控制台可增删改，前后台都以它为准）。 */
+  chapters: Chapter[]
 }
 
 /** 配置接口的响应。 */

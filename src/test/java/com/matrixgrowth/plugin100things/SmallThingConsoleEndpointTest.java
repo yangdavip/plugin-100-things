@@ -128,7 +128,11 @@ class SmallThingConsoleEndpointTest {
             .isEqualTo(SmallThingConfig.DEFAULT_PAGE_TITLE)
             // 默认值由后端给出，前端不再抄一份，避免两边默认文案漂移
             .jsonPath("$.defaults.pageTitle")
-            .isEqualTo(SmallThingConfig.DEFAULT_PAGE_TITLE);
+            .isEqualTo(SmallThingConfig.DEFAULT_PAGE_TITLE)
+            // 章节也走同一份契约：控制台的「生活章节」页签据此渲染
+            .jsonPath("$.config.chapters").isArray()
+            .jsonPath("$.config.chapters[0].name").isEqualTo("启程")
+            .jsonPath("$.config.chapters[5].min").isEqualTo(100);
     }
 
     @Test
@@ -136,6 +140,9 @@ class SmallThingConsoleEndpointTest {
         SmallThingConfig saved = new SmallThingConfig();
         saved.setPageTitle("我的清单");
         saved.setShowProgress(false);
+        saved.setChapters(java.util.List.of(
+            new SmallThingConfig.Chapter("序章", "一切从今天开始。", 0),
+            new SmallThingConfig.Chapter("收尾", "这一程走完了。", 50)));
         when(configService.save(any(SmallThingConfig.class))).thenReturn(Mono.just(saved));
 
         client.put().uri("/settings")
@@ -144,20 +151,70 @@ class SmallThingConsoleEndpointTest {
             .expectStatus().isOk()
             .expectBody()
             .jsonPath("$.config.pageTitle").isEqualTo("我的清单")
-            .jsonPath("$.config.showProgress").isEqualTo(false);
+            .jsonPath("$.config.showProgress").isEqualTo(false)
+            // 章节必须原样回传：否则保存后界面会显示成默认章节，用户以为没存上
+            .jsonPath("$.config.chapters.length()").isEqualTo(2)
+            .jsonPath("$.config.chapters[1].name").isEqualTo("收尾");
     }
 
     @Test
-    void contentWriteEndpointsMustNotExist() {
-        // 清单文案是内置内容：没有创建、没有删除入口。
-        // 这里用 404 作为判据——如果哪天有人把 POST/DELETE 加回来，这条会红。
+    void createShouldReturn201WithCreatedThing() {
+        when(service.create(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
         client.post().uri("/smallthings")
             .bodyValue(thing())
             .exchange()
-            .expectStatus().isNotFound();
+            .expectStatus().isCreated()
+            .expectBody()
+            .jsonPath("$.spec.title").isEqualTo("和十七岁的自己聊一次天");
+    }
+
+    @Test
+    void createShouldPropagateValidationErrorAs400() {
+        // 校验失败必须变成 400：静默成功会让界面以为加进去了
+        when(service.create(any(SmallThing.class)))
+            .thenReturn(Mono.error(new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "编号 1 已被占用")));
+
+        client.post().uri("/smallthings")
+            .bodyValue(thing())
+            .exchange()
+            .expectStatus().isBadRequest();
+    }
+
+    @Test
+    void updateShouldTakeNameFromPathWhenBodyHasNoMetadata() {
+        // 控制台发的是 { spec }，名称只在 URL 里。真实环境曾因此 500：
+        // 服务层拿到一个没有 metadata 的对象，直接抛「小事元数据不能为空」。
+        when(service.update(any(SmallThing.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        SmallThing body = new SmallThing();
+        SmallThing.SmallThingSpec spec = new SmallThing.SmallThingSpec();
+        spec.setTitle("只改标题");
+        body.setSpec(spec);
+
+        client.put().uri("/smallthings/smallthing-001")
+            .bodyValue(body)
+            .exchange()
+            .expectStatus().isOk();
+
+        org.mockito.ArgumentCaptor<SmallThing> captor =
+            org.mockito.ArgumentCaptor.forClass(SmallThing.class);
+        org.mockito.Mockito.verify(service).update(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().getMetadata().getName())
+            .isEqualTo("smallthing-001");
+    }
+
+    @Test
+    void deleteShouldReturnDeletedThing() {
+        when(service.delete("smallthing-001")).thenReturn(Mono.just(thing()));
 
         client.delete().uri("/smallthings/smallthing-001")
             .exchange()
-            .expectStatus().isNotFound();
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.metadata.name").isEqualTo("smallthing-001");
     }
 }

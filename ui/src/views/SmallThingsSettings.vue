@@ -2,8 +2,8 @@
 /**
  * 「100 件小事」的展示配置页。
  *
- * 这里只配置**展示方式**（标题、副标题、引言、页脚、进度条、是否分组），
- * 不改清单内容本身——清单是内置的 100 件小事，任何人都不能编辑。
+ * 这里配置**页面本身**：标题、副标题、引言、页脚、进度条、是否分组。
+ * 清单条目请到顶部「小事清单」页签（可增删改），生活章节请到「生活章节」页签。
  *
  * 配置存在插件自己的 ConfigMap（`plugin-100-things-config`）里，保存后前台
  * 下一次请求即生效，不需要重启插件、也不需要重新发版。
@@ -40,8 +40,8 @@ async function load() {
   errorMessage.value = ''
   try {
     const response = await fetchSettings()
-    config.value = { ...response.config }
-    defaults.value = { ...response.defaults }
+    config.value = structuredClone(response.config)
+    defaults.value = structuredClone(response.defaults)
     pagePath.value = response.pagePath
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : String(e)
@@ -61,8 +61,8 @@ async function submit() {
   try {
     const response = await saveSettings(config.value)
     // 以服务端规范化后的结果为准（它可能截断了超长文本、把空标题回退成默认值）
-    config.value = { ...response.config }
-    defaults.value = { ...response.defaults }
+    config.value = structuredClone(response.config)
+    defaults.value = structuredClone(response.defaults)
     notice.value = '已保存，前台刷新即可看到效果'
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : String(e)
@@ -76,7 +76,8 @@ function resetToDefaults() {
   if (!defaults.value) {
     return
   }
-  config.value = { ...defaults.value }
+  // 深拷贝：chapters 是数组，直接展开会让表单和 defaults 共用同一个引用
+  config.value = structuredClone(defaults.value)
   notice.value = '已填回默认值，点「保存配置」后生效'
 }
 
@@ -111,7 +112,7 @@ onMounted(load)
       <section class="th-conf-card">
         <div class="th-conf-head">
           <h2>博客前台地址</h2>
-          <p>插件启用后，这个地址就是访客看到的清单页。内容只读，访客不能修改。</p>
+          <p>插件启用后，这个地址就是访客看到的清单页。访客只读，改动都在控制台完成。</p>
         </div>
         <div class="th-conf-url">
           <code>{{ pageUrl }}</code>
@@ -121,6 +122,13 @@ onMounted(load)
           </a>
         </div>
       </section>
+
+      <!-- 管理入口提示：配置页只管文案，清单与章节在别的页签，不写清楚会以为「没地方改」 -->
+      <div class="th-conf-tip">
+        清单条目（编号 / 名字 / 分类 / 删除）在顶部
+        <b>小事清单</b> 页签里改；生活章节（章节名、寄语、多少件解锁）在
+        <b>生活章节</b> 页签里改。
+      </div>
 
       <!-- 文案 -->
       <section class="th-conf-card">
@@ -277,6 +285,21 @@ onMounted(load)
   padding: 20px 22px 22px;
   margin-bottom: 16px;
   box-shadow: 0 1px 0 rgba(61, 54, 44, 0.03);
+}
+
+.th-conf-tip {
+  margin: -4px 0 16px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: var(--paper);
+  border: 1px dashed var(--line);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+.th-conf-tip b {
+  color: var(--accent-deep);
+  font-weight: 600;
 }
 
 .th-conf-head h2 {

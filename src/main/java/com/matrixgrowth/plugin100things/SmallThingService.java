@@ -6,13 +6,13 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import run.halo.app.extension.Metadata;
 import run.halo.app.extension.ReactiveExtensionClient;
 
 /**
@@ -26,6 +26,18 @@ import run.halo.app.extension.ReactiveExtensionClient;
  */
 @Service
 public class SmallThingService {
+
+    /** 编号上限：编号在页面上按三位补零展示，超过 999 会变成四位。 */
+    static final int MAX_NUMBER = 999;
+
+    /** 标题长度上限。 */
+    static final int MAX_TITLE_LENGTH = 100;
+
+    /** 分类长度上限（与 {@link SmallThing.SmallThingSpec} 的 Schema 一致）。 */
+    static final int MAX_CATEGORY_LENGTH = 32;
+
+    /** 一句话记录长度上限。 */
+    static final int MAX_NOTE_LENGTH = 500;
 
     private final ReactiveExtensionClient client;
 
@@ -59,14 +71,73 @@ public class SmallThingService {
     /**
      * 创建一条小事。
      *
+     * <p>名称由后端按编号生成（{@code smallthing-007}），不接受前端传名：中文标题做不了
+     * Halo 要求的 DNS-1123 名称，而让前端自己拼一个则可能出现两条记录抢同一个名字。
+     *
+     * <p>编号必须唯一：两张卡片都写着 № 007 时，用户没法判断自己点开的是哪一条。
+     *
      * @param smallThing 待创建的小事
      * @return 创建后的小事
      */
     public Mono<SmallThing> create(SmallThing smallThing) {
-        Assert.notNull(smallThing, "小事不能为空");
-        Assert.notNull(smallThing.getSpec(), "小事内容不能为空");
-        smallThing.setStatus(buildStatus(smallThing));
-        return client.create(smallThing);
+        // 校验（会抛 400）必须发生在订阅之后：直接同步抛的话，报错会绕过响应式错误通道，
+        // 到 HTTP 层就变成没有 message 的 500，界面无从提示。
+        return Mono.defer(() -> {
+            Assert.notNull(smallThing, "小事不能为空");
+            Assert.notNull(smallThing.getSpec(), "小事内容不能为空");
+            validateSpec(smallThing.getSpec(), true);
+            SmallThing.SmallThingSpec spec = smallThing.getSpec();
+            spec.setTitle(trim(spec.getTitle()));
+            spec.setCategory(trim(spec.getCategory()));
+            if (spec.getStatus() == null) {
+                spec.setStatus(SmallThing.SmallThingSpec.Status.TODO);
+            }
+            if (smallThing.getMetadata() == null) {
+                smallThing.setMetadata(new Metadata());
+            }
+            smallThing.getMetadata().setName(null);
+            Integer number = spec.getNumber();
+            String generatedName = nameOf(number);
+            return client.list(SmallThing.class,
+                    thing -> thing.getSpec() != null
+                        && number.equals(thing.getSpec().getNumber()),
+                    Comparator.comparing(thing -> thing.getSpec().getNumber()))
+                .collectList()
+                .flatMap(sameNumber -> {
+                    if (!sameNumber.isEmpty()) {
+                        // 列表在删除收尾期间仍会看到这条记录：此时它不是「被占用」，
+                        // 而是「刚删、还在收尾」，两者对用户的下一步动作完全不同。
+                        boolean terminating = sameNumber.stream().allMatch(thing ->
+                            thing.getMetadata() != null
+                                && thing.getMetadata().getDeletionTimestamp() != null);
+                        return Mono.error(badRequest(terminating
+                            ? "编号 " + number + " 正在删除中，请稍后再试或换一个编号"
+                            : "编号 " + number + " 已被占用，请换一个编号"));
+                    }
+                    // 编号已空但资源名仍被占用：上一次删除还在收尾。
+                    // 直接 create 会抛冲突异常，到界面就是一个看不懂的 500。
+                    return client.fetch(SmallThing.class, generatedName)
+                        .hasElement()
+                        .flatMap(nameTaken -> Boolean.TRUE.equals(nameTaken)
+                            ? Mono.<SmallThing>error(badRequest(
+                                "编号 " + number + " 正在删除中，请稍后再试或换一个编号"))
+                            : Mono.defer(() -> {
+                                smallThing.getMetadata().setName(generatedName);
+                                smallThing.setStatus(buildStatus(smallThing));
+                                return client.create(smallThing);
+                            }));
+                });
+        });
+    }
+
+    /**
+     * 编号对应的资源名（与预置数据同名规则，便于在控制台的资源列表里一眼对上）。
+     *
+     * @param number 编号
+     * @return metadata.name
+     */
+    static String nameOf(Integer number) {
+        return String.format("smallthing-%03d", number);
     }
 
     /**
@@ -95,6 +166,9 @@ public class SmallThingService {
      *
      * <p>仅覆盖请求体中携带的字段，未携带的字段保持原值——这与资料库版本的「增量更新」语义一致。
      *
+     * <p>清单文案（编号 / 标题 / 分类）在控制台可以改：后台是唯一的编辑入口，前台展示页
+     * 对访客只读。改编号时会重新校验唯一性，避免两条记录顶着同一个 №。
+     *
      * @param smallThing 待更新的小事（metadata.name 必填）
      * @return 更新后的小事
      */
@@ -104,12 +178,13 @@ public class SmallThingService {
         String name = smallThing.getMetadata().getName();
         Assert.hasText(name, "小事名称不能为空");
         return client.get(SmallThing.class, name)
+            .switchIfEmpty(Mono.error(notFound(name)))
+            .flatMap(existed -> assertNumberAvailable(existed, smallThing).thenReturn(existed))
             .map(existed -> {
                 SmallThing merged = merge(existed, smallThing);
                 merged.setStatus(buildStatus(merged));
                 return merged;
             })
-            .switchIfEmpty(Mono.error(new IllegalArgumentException("小事不存在：" + name)))
             .flatMap(client::update);
     }
 
@@ -123,8 +198,17 @@ public class SmallThingService {
      */
     public Mono<SmallThing> delete(String name) {
         return client.get(SmallThing.class, name)
-            .flatMap(client::delete)
-            .switchIfEmpty(Mono.error(new IllegalArgumentException("小事不存在：" + name)));
+            .switchIfEmpty(Mono.error(notFound(name)))
+            // 已经带删除时间戳的记录表示「正在删」，此时再删一次会「成功」——
+            // 界面于是显示删除成功，而实际上什么都没发生（真实环境实测：连删两次都返回 200）
+            .flatMap(thing -> thing.getMetadata() != null
+                && thing.getMetadata().getDeletionTimestamp() != null
+                ? Mono.error(notFound(name))
+                : client.delete(thing));
+    }
+
+    private ResponseStatusException notFound(String name) {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, "小事不存在：" + name);
     }
 
     /**
@@ -153,11 +237,12 @@ public class SmallThingService {
         SmallThing.SmallThingSpec oldSpec = existed.getSpec();
         SmallThing.SmallThingSpec newSpec = incoming.getSpec();
         if (newSpec != null) {
-            assertContentUnchanged(oldSpec, newSpec);
+            validateSpec(newSpec, false);
             SmallThing.SmallThingSpec spec = new SmallThing.SmallThingSpec();
             spec.setNumber(newSpec.getNumber() != null ? newSpec.getNumber() : oldSpec.getNumber());
-            spec.setTitle(newSpec.getTitle() != null ? newSpec.getTitle() : oldSpec.getTitle());
-            spec.setCategory(newSpec.getCategory() != null ? newSpec.getCategory() : oldSpec.getCategory());
+            spec.setTitle(trim(newSpec.getTitle() != null ? newSpec.getTitle() : oldSpec.getTitle()));
+            spec.setCategory(trim(newSpec.getCategory() != null
+                ? newSpec.getCategory() : oldSpec.getCategory()));
             spec.setStatus(newSpec.getStatus() != null ? newSpec.getStatus() : oldSpec.getStatus());
             spec.setMood(newSpec.getMood() != null ? newSpec.getMood() : oldSpec.getMood());
             spec.setDoneAt(newSpec.getDoneAt() != null ? newSpec.getDoneAt() : oldSpec.getDoneAt());
@@ -169,34 +254,92 @@ public class SmallThingService {
         return merged;
     }
 
+    /** 编号上限、标题长度上限等常量见类顶部。 */
+
     /**
-     * 清单文案不可修改（编号 / 标题 / 分类）。
+     * 改编号时校验唯一性。
      *
-     * <p>「100 件小事」的内容是内置清单：控制台只允许记录进度（状态、日期、心情、一句话），
-     * 不允许改文案。这条约束**必须落在服务层**——只在界面上隐藏输入框的话，任何人用
-     * curl 打一次 PUT 就能改掉全站展示内容。
+     * <p>编号没变或本次没传编号时直接放行——已经在用自己那个编号不算冲突。
      *
-     * <p>字段为 null 表示「本次不修改」，不算违规；只有传了不同的值才拒绝，
-     * 并且明确报 400 而不是静默忽略（静默忽略会让人以为改成功了）。
-     *
-     * @param oldSpec 库里的原值
-     * @param newSpec 请求体
+     * @param existed 库里的原记录
+     * @param incoming 请求体
+     * @return 校验结果（冲突时以 400 结束）
      */
-    private void assertContentUnchanged(SmallThing.SmallThingSpec oldSpec,
-        SmallThing.SmallThingSpec newSpec) {
-        if (oldSpec == null) {
-            return;
+    private Mono<Void> assertNumberAvailable(SmallThing existed, SmallThing incoming) {
+        Integer number = incoming.getSpec() == null ? null : incoming.getSpec().getNumber();
+        Integer current = existed.getSpec() == null ? null : existed.getSpec().getNumber();
+        if (number == null || number.equals(current)) {
+            return Mono.empty();
         }
-        rejectIfChanged("编号", oldSpec.getNumber(), newSpec.getNumber());
-        rejectIfChanged("标题", oldSpec.getTitle(), newSpec.getTitle());
-        rejectIfChanged("分类", oldSpec.getCategory(), newSpec.getCategory());
+        return client.list(SmallThing.class,
+                thing -> thing.getSpec() != null && number.equals(thing.getSpec().getNumber()),
+                Comparator.comparing(thing -> thing.getSpec().getNumber()))
+            .hasElements()
+            .flatMap(occupied -> Boolean.TRUE.equals(occupied)
+                ? Mono.error(badRequest("编号 " + number + " 已被占用，请换一个编号"))
+                : Mono.empty());
     }
 
-    private void rejectIfChanged(String field, Object original, Object incoming) {
-        if (incoming != null && !Objects.equals(original, incoming)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "小事文案不可修改：" + field);
+    /**
+     * 校验标语字段。
+     *
+     * <p>只在「本次真的传了这个字段」时校验（{@code creating} 为 true 时全部必填）：
+     * 增量更新里 null 表示不修改，拿 null 去报「不能为空」会让只改心情的请求也被拒。
+     *
+     * <p>分类尤其不能留空：{@code groupByCategory} 会跳过空分类，卡片会在前台
+     * **整条消失**（不报错、也不提示），比报 400 糟得多。
+     *
+     * @param spec 待校验的 spec
+     * @param creating 是否为新建
+     */
+    private void validateSpec(SmallThing.SmallThingSpec spec, boolean creating) {
+        if (spec == null) {
+            throw badRequest("小事内容不能为空");
         }
+        if (creating || spec.getNumber() != null) {
+            Integer number = spec.getNumber();
+            if (number == null || number < 1 || number > MAX_NUMBER) {
+                throw badRequest("编号必须是 1-" + MAX_NUMBER + " 之间的整数");
+            }
+        }
+        if (creating || spec.getTitle() != null) {
+            String title = spec.getTitle() == null ? "" : spec.getTitle().trim();
+            if (title.isEmpty()) {
+                throw badRequest("小事标题不能为空");
+            }
+            if (title.length() > MAX_TITLE_LENGTH) {
+                throw badRequest("小事标题最多 " + MAX_TITLE_LENGTH + " 个字");
+            }
+        }
+        if (creating || spec.getCategory() != null) {
+            String category = spec.getCategory() == null ? "" : spec.getCategory().trim();
+            if (category.isEmpty()) {
+                throw badRequest("分类不能为空，空分类的条目不会出现在前台");
+            }
+            if (category.length() > MAX_CATEGORY_LENGTH) {
+                throw badRequest("分类最多 " + MAX_CATEGORY_LENGTH + " 个字");
+            }
+        }
+        if (spec.getNote() != null && spec.getNote().length() > MAX_NOTE_LENGTH) {
+            throw badRequest("一句话记录最多 " + MAX_NOTE_LENGTH + " 个字");
+        }
+    }
+
+    private ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    /**
+     * 去首尾空白。
+     *
+     * <p>分类必须去空白：分组是按字符串精确匹配的，写成「" 青春时光"」会被当成一个
+     * 自定义分类排到列表末尾——卡片没丢，但位置不对，而且没有任何报错提示。
+     *
+     * @param value 原值
+     * @return 去空白后的值（null 保持 null）
+     */
+    private String trim(String value) {
+        return value == null ? null : value.trim();
     }
 
     /**

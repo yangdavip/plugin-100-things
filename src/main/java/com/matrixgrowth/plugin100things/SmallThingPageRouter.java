@@ -31,6 +31,9 @@ import run.halo.app.theme.router.ModelConst;
  *   <li>{@code smallThings} — 小事列表</li>
  *   <li>{@code groups} — 分好组的小事（平铺模式下是唯一的无序分组）</li>
  *   <li>{@code treasuredCount} — 已珍藏件数</li>
+ *   <li>{@code chapter} — 当前章节（来自配置，可能为 null）</li>
+ *   <li>{@code nextChapter} — 下一个未解锁章节（可能为 null）</li>
+ *   <li>{@code remaining} — 距下一章还差多少件</li>
  *   <li>{@code _templateId} — 固定为 {@code plugin:plugin-100-things:small-things}</li>
  * </ul>
  *
@@ -76,11 +79,19 @@ public class SmallThingPageRouter {
                 // 分组在 Java 侧算好：模板里用 SpEL 集合选择取不到外层循环变量（EL1008E），
                 // 而 th:if 先于 th:with 求值会让失败退化成「静默空列表」。
                 model.put("groups", service.groupByCategory(items, settings.isGroupByCategory()));
-                model.put("treasuredCount",
-                    items.stream()
-                        .filter(item -> item.getSpec() != null
-                            && item.getSpec().getStatus() == SmallThing.SmallThingSpec.Status.TREASURED)
-                        .count());
+                long treasured = items.stream()
+                    .filter(item -> item.getSpec() != null
+                        && item.getSpec().getStatus() == SmallThing.SmallThingSpec.Status.TREASURED)
+                    .count();
+                model.put("treasuredCount", treasured);
+                // 章节定义存在配置里（控制台可改），前台进度条据此显示当前章节与下一章还差几件
+                SmallThingConfig.Chapter chapter =
+                    SmallThingConfig.currentOf(settings.getChapters(), treasured);
+                SmallThingConfig.Chapter nextChapter =
+                    SmallThingConfig.nextOf(settings.getChapters(), treasured);
+                model.put("chapter", chapter);
+                model.put("nextChapter", nextChapter);
+                model.put("remaining", nextChapter == null ? 0L : nextChapter.getMin() - treasured);
                 model.put(ModelConst.TEMPLATE_ID, TEMPLATE_ID);
                 return templateNameResolver
                     .resolveTemplateNameOrDefault(request.exchange(), DEFAULT_TEMPLATE)

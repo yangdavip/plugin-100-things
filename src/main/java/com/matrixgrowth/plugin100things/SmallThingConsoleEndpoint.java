@@ -13,16 +13,16 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
+import run.halo.app.extension.Metadata;
 
 /**
  * 「100 件小事」的 Console 端 API（需要登录并具备角色权限）。
  *
  * <p>路径前缀为 {@code /apis/console.api.hundredthings.plugin.halo.run/v1alpha1}。
  *
- * <p>能力边界：清单文案（编号 / 标题 / 分类）是内置内容，**没有任何写入入口**——
- * 没有创建、没有删除，更新也只接受进度字段（状态 / 日期 / 心情 / 一句话），
- * 改文案会被 {@link SmallThingService#update(SmallThing)} 拒绝为 400。
- * 可写的东西只有 {@code /settings} 里的展示配置。
+ * <p>能力边界：控制台是**唯一**的编辑入口——清单可以新增、修改（含编号 / 标题 / 分类）、
+ * 删除，生活章节与页面文案存在 {@code /settings} 里。博客前台的展示页对访客只读，
+ * 没有任何写入接口。
  *
  * @author matrixgrowth
  * @since 1.0.0
@@ -49,10 +49,12 @@ public class SmallThingConsoleEndpoint implements CustomEndpoint {
             .GET("/settings", this::getSettings)
             .PUT("/settings", this::updateSettings)
             .GET("/smallthings", this::listSmallThings)
+            .POST("/smallthings", this::createSmallThing)
             .GET("/smallthings/stats", this::stats)
             .GET("/smallthings/options", this::options)
             .GET("/smallthings/{name}", this::getSmallThing)
             .PUT("/smallthings/{name}", this::updateSmallThing)
+            .DELETE("/smallthings/{name}", this::deleteSmallThing)
             .build();
     }
 
@@ -73,11 +75,55 @@ public class SmallThingConsoleEndpoint implements CustomEndpoint {
     }
 
     private Mono<ServerResponse> updateSmallThing(ServerRequest request) {
+        // ⚠ 名称以路径为准，必须由服务端塞进 body：控制台只提交 { spec }（增量更新），
+        // 而 service.update 需要 metadata.name 才能定位记录。缺了它整条 PUT 会 500
+        // （真实环境实测：新增后改名直接「服务器内部错误」）。
+        String name = request.pathVariable("name");
         return request.bodyToMono(SmallThing.class)
+            .switchIfEmpty(Mono.error(
+                new ResponseStatusException(HttpStatus.BAD_REQUEST, "小事内容不能为空")))
+            .map(body -> {
+                if (body.getMetadata() == null) {
+                    body.setMetadata(new Metadata());
+                }
+                body.getMetadata().setName(name);
+                return body;
+            })
             .flatMap(service::update)
             .flatMap(updated -> ServerResponse.ok()
                 .contentType(APPLICATION_JSON)
                 .bodyValue(updated));
+    }
+
+    /**
+     * 新增一条小事。
+     *
+     * <p>响应体是创建后的完整对象，前端据此把它插进列表，不需要再整表刷新。
+     *
+     * @param request 请求（body 为 {@link SmallThing}，metadata.name 会被后端覆盖）
+     * @return 创建后的小事
+     */
+    private Mono<ServerResponse> createSmallThing(ServerRequest request) {
+        return request.bodyToMono(SmallThing.class)
+            .switchIfEmpty(Mono.error(
+                new ResponseStatusException(HttpStatus.BAD_REQUEST, "小事内容不能为空")))
+            .flatMap(service::create)
+            .flatMap(created -> ServerResponse.status(HttpStatus.CREATED)
+                .contentType(APPLICATION_JSON)
+                .bodyValue(created));
+    }
+
+    /**
+     * 删除一条小事。
+     *
+     * @param request 请求
+     * @return 被删除的小事
+     */
+    private Mono<ServerResponse> deleteSmallThing(ServerRequest request) {
+        return service.delete(request.pathVariable("name"))
+            .flatMap(deleted -> ServerResponse.ok()
+                .contentType(APPLICATION_JSON)
+                .bodyValue(deleted));
     }
 
     /**

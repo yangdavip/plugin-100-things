@@ -5,8 +5,10 @@
  * 三个页签：配置（默认打开）/ 小事清单 / 生活章节。
  *
  * - 配置：页面文案与展示方式，存 ConfigMap，改完立即生效。
- * - 小事清单 / 生活章节：打卡看板。**只记录进度**（状态、日期、心情、一句话），
- *   清单文案是内置内容，界面与接口都不提供修改入口。
+ * - 小事清单：新增、编辑（编号 / 名字 / 分类 / 状态 / 日期 / 心情 / 一句话）、删除。
+ * - 生活章节：章节进度视图 + 章节设置（章节名、寄语、解锁阈值）。
+ *
+ * 博客前台展示页对访客只读；编辑入口只有这里。
  */
 import { ref } from 'vue'
 import SmallThingsBoard from './SmallThingsBoard.vue'
@@ -28,7 +30,7 @@ const tabs: Array<{ key: TabKey; label: string }> = [
     <header class="th-console-bar">
       <div class="th-console-title">
         <span class="serif">100 件小事</span>
-        <span class="th-console-tag">清单内容只读</span>
+        <span class="th-console-tag">前台访客只读</span>
       </div>
       <nav class="th-console-tabs">
         <button

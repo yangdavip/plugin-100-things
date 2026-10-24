@@ -171,4 +171,70 @@ class SmallThingConfigServiceTest {
                 .hasSize(SmallThingConfigService.MAX_TEXT_LENGTH))
             .verifyComplete();
     }
+
+    @Test
+    void loadShouldParseChaptersFromConfigMap() {
+        Map<String, String> data = new HashMap<>();
+        data.put(SmallThingConfigService.KEY_CHAPTERS,
+            "[{\"name\":\"序章\",\"say\":\"从这里开始。\",\"min\":0},"
+                + "{\"name\":\"收尾\",\"say\":\"走到了。\",\"min\":30}]");
+        when(client.fetch(eq(ConfigMap.class), eq(SmallThingConfigService.CONFIG_MAP_NAME)))
+            .thenReturn(Mono.just(configMap(data)));
+
+        StepVerifier.create(service.load())
+            .assertNext(config -> {
+                assertThat(config.getChapters()).hasSize(2);
+                assertThat(config.getChapters().get(0).getName()).isEqualTo("序章");
+                assertThat(config.getChapters().get(1).getMin()).isEqualTo(30);
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void loadShouldFallBackToDefaultChaptersWhenJsonIsBroken() {
+        // 章节是 ConfigMap 里唯一的多值字段，最容易被手改成非法 JSON。
+        // 坏数据只能让章节回退默认值，不能让前台整页 500。
+        Map<String, String> data = new HashMap<>();
+        data.put(SmallThingConfigService.KEY_CHAPTERS, "{ not json ]");
+        data.put(SmallThingConfigService.KEY_PAGE_TITLE, "标题仍然生效");
+        when(client.fetch(eq(ConfigMap.class), eq(SmallThingConfigService.CONFIG_MAP_NAME)))
+            .thenReturn(Mono.just(configMap(data)));
+
+        StepVerifier.create(service.load())
+            .assertNext(config -> {
+                assertThat(config.getPageTitle()).isEqualTo("标题仍然生效");
+                assertThat(config.getChapters()).hasSize(6);
+                assertThat(config.getChapters().get(0).getName()).isEqualTo("启程");
+            })
+            .verifyComplete();
+    }
+
+    @Test
+    void saveShouldWriteChaptersAsJsonAndNormalizeThem() {
+        when(client.fetch(eq(ConfigMap.class), anyString())).thenReturn(Mono.empty());
+        when(client.create(any(ConfigMap.class)))
+            .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        SmallThingConfig config = new SmallThingConfig();
+        config.setChapters(java.util.List.of(
+            new SmallThingConfig.Chapter("后半程", "慢慢走。", 40),
+            new SmallThingConfig.Chapter("启程", "开始。", 0),
+            // 阈值重复：两章都写 40 时后者永远命中不了，必须去重
+            new SmallThingConfig.Chapter("幽灵章", "不会出现。", 40)));
+
+        StepVerifier.create(service.save(config))
+            .assertNext(saved -> {
+                assertThat(saved.getChapters()).hasSize(2);
+                assertThat(saved.getChapters()).extracting(SmallThingConfig.Chapter::getName)
+                    .containsExactly("启程", "后半程");
+            })
+            .verifyComplete();
+
+        ArgumentCaptor<ConfigMap> captor = ArgumentCaptor.forClass(ConfigMap.class);
+        verify(client).create(captor.capture());
+        assertThat(captor.getValue().getData())
+            .containsKey(SmallThingConfigService.KEY_CHAPTERS);
+        assertThat(captor.getValue().getData().get(SmallThingConfigService.KEY_CHAPTERS))
+            .contains("\"启程\"").contains("\"min\":0");
+    }
 }

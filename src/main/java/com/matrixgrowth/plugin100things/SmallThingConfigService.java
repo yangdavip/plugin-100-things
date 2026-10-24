@@ -1,6 +1,9 @@
 package com.matrixgrowth.plugin100things;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,6 +39,14 @@ public class SmallThingConfigService {
     static final String KEY_FOOTER_NOTE = "footerNote";
     static final String KEY_SHOW_PROGRESS = "showProgress";
     static final String KEY_GROUP_BY_CATEGORY = "groupByCategory";
+    static final String KEY_CHAPTERS = "chapters";
+
+    /** 章节是列表，只能序列化成 JSON 存进单个键。 */
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private static final TypeReference<List<SmallThingConfig.Chapter>> CHAPTER_LIST =
+        new TypeReference<>() {
+        };
 
     /** 字符串字段的长度上限，避免一屏标题被填成一段文章。 */
     static final int MAX_TEXT_LENGTH = 120;
@@ -106,6 +117,7 @@ public class SmallThingConfigService {
                 : data.get(KEY_FOOTER_NOTE).trim());
         config.setShowProgress(flag(data, KEY_SHOW_PROGRESS, true));
         config.setGroupByCategory(flag(data, KEY_GROUP_BY_CATEGORY, true));
+        config.setChapters(chapters(data.get(KEY_CHAPTERS)));
         return config;
     }
 
@@ -123,6 +135,7 @@ public class SmallThingConfigService {
         data.put(KEY_FOOTER_NOTE, config.getFooterNote() == null ? "" : config.getFooterNote());
         data.put(KEY_SHOW_PROGRESS, Boolean.toString(config.isShowProgress()));
         data.put(KEY_GROUP_BY_CATEGORY, Boolean.toString(config.isGroupByCategory()));
+        data.put(KEY_CHAPTERS, writeChapters(config.getChapters()));
         return data;
     }
 
@@ -145,7 +158,51 @@ public class SmallThingConfigService {
             ? "" : config.getFooterNote().trim()));
         result.setShowProgress(config.isShowProgress());
         result.setGroupByCategory(config.isGroupByCategory());
+        result.setChapters(SmallThingConfig.normalizeChapters(config.getChapters()));
         return result;
+    }
+
+    /**
+     * 解析章节 JSON。
+     *
+     * <p>解析失败不抛错：坏数据只让章节回退默认值，不能让前台整页 500。章节是 ConfigMap 里
+     * 唯一的多值字段，也是最容易被手改成非法 JSON 的一个。
+     *
+     * @param json 章节 JSON（可为 null）
+     * @return 规范化后的章节列表
+     */
+    private List<SmallThingConfig.Chapter> chapters(String json) {
+        if (json == null || json.isBlank()) {
+            return SmallThingConfig.defaultChapters();
+        }
+        try {
+            List<SmallThingConfig.Chapter> parsed = MAPPER.readValue(json, CHAPTER_LIST);
+            return SmallThingConfig.normalizeChapters(parsed);
+        } catch (Exception e) {
+            log.warn("配置项 {} 不是合法的章节 JSON，已回退默认章节：{}", KEY_CHAPTERS, e.getMessage());
+            return SmallThingConfig.defaultChapters();
+        }
+    }
+
+    /**
+     * 序列化章节。
+     *
+     * @param chapters 章节列表（可为空）
+     * @return JSON；序列化失败时返回默认章节的 JSON
+     */
+    private String writeChapters(List<SmallThingConfig.Chapter> chapters) {
+        try {
+            return MAPPER.writeValueAsString(
+                SmallThingConfig.normalizeChapters(chapters));
+        } catch (Exception e) {
+            log.warn("章节序列化失败，已写入默认章节：{}", e.getMessage());
+            try {
+                return MAPPER.writeValueAsString(SmallThingConfig.defaultChapters());
+            } catch (Exception ignored) {
+                // 默认章节是固定结构，理论上不会失败；真失败了也不能让保存整体崩掉
+                return "[]";
+            }
+        }
     }
 
     private String clean(String value, String fallback) {
